@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>探游中国 · 文旅目的地热度分析平台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="topbar" id="topbar"><div class="topbar-inner">
+  <a class="logo" onclick="goHome()"><span class="logo-icon">🏯</span><span class="logo-text">探游中国</span></a>
+  <div class="nav-items">
+    <div class="nav-btn active" data-p="rankings" onclick="switchPage('rankings',this)">首页</div>
+    <div class="nav-btn" data-p="wordcloud" onclick="switchPage('wordcloud',this)">词云分析</div>
+    <div class="nav-btn" data-p="detail" onclick="switchPage('detail',this)">深度分析</div>
+    <div class="nav-btn" data-p="comparison" onclick="switchPage('comparison',this)">景点对比</div>
+    <div class="nav-btn" data-p="plan" onclick="switchPage('plan',this)">旅游规划</div>
+    <div class="nav-btn" data-p="operation" onclick="switchPage('operation',this)">运营模式</div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-search" id="topbarSearch">
+  <button class="search-toggle-btn" onclick="toggleTopbarSearch()" title="搜索">🔍</button>
+  <input class="ts-input ts-input-collapsed" type="text" id="searchInput" placeholder="搜索景点..." oninput="onSearch(this.value)" onfocus="onSearch(this.value)" onkeydown="if(event.key==='Enter')doSearch()" onblur="setTimeout(collapseTopbarSearch,200)">
+  <div class="search-results" id="searchResults"></div>
+</div>
+    <select class="engine-select" id="aiEngine" onchange="switchEngine(this.value)"><option value="groq">🌐 Groq</option><option value="zhipu">🇨🇳 智谱</option></select>
+    <button class="theme-toggle" onclick="toggleTheme()"></button>
+  </div>
+</div></div>
+
+<div class="hero"><div class="hero-particles" id="particles"></div>
+  <div class="hero-content"><h1 class="hero-title">发现中国文旅<br><span class="gradient">热门目的地</span>的秘密</h1><div class="hero-search">
+  <input class="hero-search-input" type="text" id="heroSearchInput" placeholder="搜索景点名称（如：兵马俑、华清宫）..." oninput="onHeroSearch(this.value)" onkeydown="if(event.key==='Enter')doHeroSearch()">
+  <span class="hero-search-icon">🔍</span>
+  <div class="hero-search-results" id="heroSearchResults"></div>
+</div><p class="hero-desc">通过大数据分析与AI智能洞察，解码景区爆红路径，提炼可复制的文旅运营模式</p></div>
+</div>
+
+<div class="content-area">
+
+<div class="page on" id="p-rankings">
+  <!-- 5核心指标卡 -->
+  <div class="metric-grid" id="metricGrid"></div>
+
+<!-- 第一行：景点排名 + 西安地图 -->
+<div class="dual-grid">
+  <div class="rank-card-compact" style="margin-bottom:0">
+    <div class="rank-card-head">
+        <div class="rank-card-title">
+            <span class="rank-card-title-icon">🏆</span>
+            景点排行榜
+        </div>
+        <a class="view-all-btn" onclick="goToFullRankings()">查看全部 <span>→</span></a>
+    </div>
+
+    <!-- 首页双榜 Mini Tab -->
+    <div class="home-rank-tabs">
+        <div class="home-rank-tab on" data-target="hot" onclick="switchHomeRankTab('hot', this)">🔥 热度榜</div>
+        <div class="home-rank-tab" data-target="quality" onclick="switchHomeRankTab('quality', this)">👍 好评榜</div>
+    </div>
+
+    <div class="rank-list" id="rankListCompact"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:0">
+    <div class="card-head">
+      <div class="ch-left">🗺️ 西安各区热度</div>
+      <a class="view-all-btn" onclick="alert('完整地图开发中')">查看地图 <span>›</span></a>
+    </div>
+    <div class="district-card-content">
+      <div>
+        <div class="district-map" id="districtMap"></div>
+        <div class="district-legend">
+          <span>低</span>
+          <div class="legend-bar"></div>
+          <span>高</span>
+        </div>
+      </div>
+      <div class="district-rank-list" id="districtRankList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 第二行：失望诊断 + 爆发预测 -->
+<div class="dual-grid">
+  <div class="diagnosis-card" id="homeDiagnosis">
+    <div class="diagnosis-head">
+      <div class="diagnosis-title">西安景区运营痛点诊断</div>
+      <a class="view-all-btn" onclick="switchPage('operation')">完整诊断 →</a>
+    </div>
+    <div class="diagnosis-meta" id="homeDiagMeta">基于评论分析中...</div>
+    <div id="homeDiagList"><div class="loading"><div class="spinner"></div>加载中</div></div>
+  </div>
+
+  <div class="potential-card">
+    <div class="potential-head">
+      <div class="potential-title">AI热度爆发预测</div>
+      <div class="potential-subtitle">未来7天预测</div>
+    </div>
+    <div class="potential-list" id="potentialList"><div class="loading"><div class="spinner"></div>预测中</div></div>
+    <div class="potential-footer">
+      <a class="potential-view-all" onclick="switchPage('prediction')">查看全部预测 →</a>
+    </div>
+  </div>
+</div>
+
+  <!-- 深度洞察四宫格 -->
+  <div class="section-header"><div class="section-title"><span class="st-icon" style="background:rgba(236,72,153,.1)">💡</span>深度洞察</div><div class="section-line"></div></div>
+  <div class="insight-grid" id="insightGrid"></div>
+</div>
+
+<div class="page" id="p-rankingsFull">
+
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(59,130,246,.1)">📊</span>景点完整排名</div>
+    <div class="section-line"></div>
+    <a class="view-all-btn" onclick="goBackHome()" style="font-size:13px;font-weight:600">← 返回首页</a>
+  </div>
+
+  <!-- 双榜单 Tab 切换 -->
+  <div class="dual-tab-bar">
+    <div class="dual-tab on" data-target="hot" onclick="switchDualTab('hot')">
+      <span class="dt-icon">🔥</span>
+      <span>热度榜</span>
+      <span class="dt-desc">三平台加权</span>
+    </div>
+    <div class="dual-tab" data-target="quality" onclick="switchDualTab('quality')">
+      <span class="dt-icon">👍</span>
+      <span>好评榜</span>
+      <span class="dt-desc">评分+口碑综合</span>
+    </div>
+  </div>
+
+  <!-- 轮播区（共用） -->
+  <div id="carousel-area"></div>
+
+  <!-- ============ 热度榜 Pane ============ -->
+  <div id="dualHotPane" style="display:block">
+
+    <!-- 权重控制卡 -->
+    <div class="card weight-control-card">
+      <div class="card-head">
+        <div class="ch-left">
+          <span class="ch-icon" style="background:rgba(167,139,250,.1)">⚙️</span>
+          <span class="ch-title">数据源权重</span>
+        </div>
+        <button class="reset-weight-btn" onclick="resetWeights()">🔄 重置为均衡</button>
+      </div>
+
+      <div class="weight-sliders">
+        <!-- 马蜂窝 -->
+        <div class="weight-row">
+          <div class="weight-label">
+            <span class="wl-dot" style="background:#e8b4a0"></span>
+            <span class="wl-name">🐝 马蜂窝</span>
+            <span class="wl-desc">深度游记数</span>
+          </div>
+          <div class="weight-slider-wrap">
+            <input type="range" id="slider_mafengwo" min="0" max="100" value="33"
+                   class="weight-slider mfw"
+                   oninput="onWeightSlide('mafengwo', this.value)">
+            <span class="weight-value" id="label_mafengwo">33%</span>
+          </div>
+        </div>
+
+        <!-- 携程 -->
+        <div class="weight-row">
+          <div class="weight-label">
+            <span class="wl-dot" style="background:#a8c5d4"></span>
+            <span class="wl-name">🐦 携程</span>
+            <span class="wl-desc">主流 OTA 评论数</span>
+          </div>
+          <div class="weight-slider-wrap">
+            <input type="range" id="slider_ctrip" min="0" max="100" value="34"
+                   class="weight-slider ctp"
+                   oninput="onWeightSlide('ctrip', this.value)">
+            <span class="weight-value" id="label_ctrip">34%</span>
+          </div>
+        </div>
+
+        <!-- 大众点评 -->
+        <div class="weight-row">
+          <div class="weight-label">
+            <span class="wl-dot" style="background:#b8c9a8"></span>
+            <span class="wl-name">💬 大众点评</span>
+            <span class="wl-desc">本地生活点评数</span>
+          </div>
+          <div class="weight-slider-wrap">
+            <input type="range" id="slider_dianping" min="0" max="100" value="33"
+                   class="weight-slider dp"
+                   oninput="onWeightSlide('dianping', this.value)">
+            <span class="weight-value" id="label_dianping">33%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="weight-hint">💡 拖动滑块自定义权重，排名实时刷新</div>
+    </div>
+
+    <!-- 热度榜表格 -->
+    <div class="card">
+      <div class="card-head">
+        <div class="ch-left">
+          <span class="ch-icon" style="background:rgba(239,68,68,.1)">🔥</span>
+          <span class="ch-title">热度排行</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>景点</th>
+              <th>马蜂窝</th>
+              <th>携程</th>
+              <th>大众点评</th>
+              <th>综合热度</th>
+            </tr>
+          </thead>
+          <tbody id="dualHotTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ 好评榜 Pane ============ -->
+  <div id="dualQualityPane" style="display:none">
+
+    <!-- 好评榜表格 -->
+    <div class="card">
+      <div class="card-head">
+        <div class="ch-left">
+          <span class="ch-icon" style="background:rgba(16,185,129,.1)">👍</span>
+          <span class="ch-title">好评排行</span>
+        </div>
+        <span class="ch-badge">评分 50% + 好评率 30% + 评论量 20%</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+                <th>排名</th>
+                <th>景点</th>
+                <th>评分</th>
+                <th>好评率</th>
+                <th>差评率</th>
+                <th>评论数</th>
+                <th>口碑指数</th>
+            </tr>
+          </thead>
+          <tbody id="dualQualityTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 好评榜保留：时间滑块柱状图 -->
+    <div class="card">
+      <div class="card-head">
+        <div class="ch-left">
+          <span class="ch-icon" style="background:rgba(167,139,250,.1)">📊</span>
+          <span class="ch-title">热度时间分析</span>
+        </div>
+      </div>
+
+      <div class="time-control">
+        <div class="time-control-right" style="flex:1;justify-content:flex-start;gap:8px;flex-wrap:wrap">
+          <span class="date-pick-label">📅 时段：</span>
+          <input type="range" id="timeSlider" min="0" max="4" value="0" step="1"
+                 oninput="onTimeSliderChange(this.value);updatePlane()" class="time-range-input">
+          <span id="timeSliderValue" style="font-weight:600;color:var(--blue);min-width:80px">全部时间</span>
+          <span style="color:var(--t3);margin:0 8px">|</span>
+          <input type="date" class="date-pick-input" id="heatDateStart">
+          <span class="date-range-sep">→</span>
+          <input type="date" class="date-pick-input" id="heatDateEnd">
+          <button class="date-pick-btn primary" onclick="onDateRangeApply()">筛选</button>
+          <button class="date-pick-btn secondary" onclick="onDateRangeReset()">重置</button>
+        </div>
+      </div>
+
+      <div class="chart-box lg" id="ch3"></div>
+    </div>
+
+  </div>
+
+</div>
+<div class="page" id="p-prediction">
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(59,130,246,.1)">🎯</span>AI热度爆发预测 · 完整分析</div>
+    <div class="section-line"></div>
+    <a class="view-all-btn" onclick="switchPage('rankings')">← 返回首页</a>
+  </div>
+  <div id="predictionDetailList"><div class="loading"><div class="spinner"></div>加载预测数据...</div></div>
+</div>
+<div class="page" id="p-wordcloud">
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(167,139,250,.1)">☁️</span>词云分析</div>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- 顶部统一筛选 -->
+  <div class="wc-filter-bar">
+    <div class="wcf-left">
+      <span class="wcf-label">📍 景点筛选</span>
+      <select id="globalSpotSelect" class="wcf-select"><option value="">全部景点</option></select>
+    </div>
+    <div class="wcf-right">
+      <button class="btn btn-primary" onclick="generateAllWC()">🎨 一键生成</button>
+      <span class="wcf-hint">点击"生成"刷新所有词云</span>
+    </div>
+  </div>
+
+  <!-- 第二行：Tab 词云 + 关键词排行榜 -->
+  <div class="wc-main-row">
+
+    <!-- 左：Tab 词云卡 -->
+    <div class="card wc-tab-card">
+      <div class="card-head wc-tab-head">
+        <div class="wc-tabs">
+          <div class="wc-tab on" data-target="综合" onclick="switchWCTab(this,'综合')">☁️ 综合词云</div>
+          <div class="wc-tab" data-target="好评" onclick="switchWCTab(this,'好评')">👍 好评词云</div>
+          <div class="wc-tab" data-target="差评" onclick="switchWCTab(this,'差评')">👎 差评词云</div>
+        </div>
+      </div>
+
+      <div class="wc-tab-content active" data-pane="综合">
+        <div class="chart-box lg" id="wc0"></div>
+      </div>
+      <div class="wc-tab-content" data-pane="好评">
+        <div class="chart-box lg" id="wc1"></div>
+      </div>
+      <div class="wc-tab-content" data-pane="差评">
+        <div class="chart-box lg" id="wc2"></div>
+      </div>
+
+      <!-- 词频分级标签 -->
+      <div class="wc-freq-legend">
+        <span class="wfl-label">词频统计：</span>
+        <span class="wfl-tag high">高频词 (≥100)</span>
+        <span class="wfl-tag mid">中频词 (50-99)</span>
+        <span class="wfl-tag low">低频词 (10-49)</span>
+      </div>
+    </div>
+
+    <!-- 右：TOP10 关键词排行 -->
+    <div class="card wc-rank-card">
+      <div class="card-head">
+        <div class="ch-left"><span class="ch-icon" style="background:rgba(251,146,60,.1)">🔥</span><span class="ch-title">关键词热度 TOP10</span></div>
+      </div>
+      <div class="wc-rank-list" id="wcRankList">
+        <div class="wc-rank-empty">选择景点后显示</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 第三行：情感-关键词热力图 -->
+  <div class="card">
+    <div class="card-head">
+      <div class="ch-left"><span class="ch-icon" style="background:rgba(0,212,170,.1)">📊</span><span class="ch-title">情感-关键词关联热力图</span></div>
+      <span class="ch-badge">悬浮查看详情</span>
+    </div>
+    <div class="chart-box lg" id="keywordSentimentChart"></div>
+  </div>
+
+  <!-- 第四行：工作日 vs 节假日（Tab 切换情感） -->
+  <!-- 工作日 vs 节假日 关键词差异 -->
+    <div class="card">
+      <div class="card-head wc-tab-head">
+        <div class="ch-left">
+          <span class="ch-icon" style="background:rgba(167,139,250,.1)">📅</span>
+          <span class="ch-title">工作日 vs 节假日 关键词差异</span>
+        </div>
+        <div class="wc-tabs week-tabs">
+          <div class="wc-tab on" data-target="positive" onclick="switchDiffTab(this,'positive')">😊 正向词差异</div>
+          <div class="wc-tab" data-target="negative" onclick="switchDiffTab(this,'negative')">😞 负向词差异</div>
+        </div>
+      </div>
+
+      <div class="diff-explain">
+        💡 只展示工作日与节假日差异显著的关键词，反映两类时段游客的真实关注点差异
+      </div>
+
+      <!-- 差异对比主区域 -->
+      <div class="diff-main">
+        <div class="diff-col workday">
+          <div class="diff-col-head">
+            <span class="diff-col-icon">🏢</span>
+            <span class="diff-col-title">工作日专属</span>
+            <span class="diff-col-hint" id="workdayCount">TOP 8</span>
+          </div>
+          <div class="diff-list" id="workdayDiffList">
+            <div class="diff-loading">加载中...</div>
+          </div>
+        </div>
+
+        <div class="diff-vs">VS</div>
+
+        <div class="diff-col holiday">
+          <div class="diff-col-head">
+            <span class="diff-col-icon">🎉</span>
+            <span class="diff-col-title">节假日专属</span>
+            <span class="diff-col-hint" id="holidayCount">TOP 8</span>
+          </div>
+          <div class="diff-list" id="holidayDiffList">
+            <div class="diff-loading">加载中...</div>
+          </div>
+        </div>
+  </div>
+
+  <!-- 共同高频词 -->
+  <div class="diff-common">
+    <div class="diff-common-head">
+      📊 共同高频词
+      <span class="diff-common-hint">两类时段都常被提及的词（不具区分度）</span>
+    </div>
+    <div class="diff-common-tags" id="commonWordsTags">
+      <span class="diff-loading-inline">加载中...</span>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="page" id="p-detail"><div class="section-header"><div class="section-title"><span class="st-icon" style="background:rgba(244,114,182,.1)">🔍</span>景点深度分析</div><div class="section-line"></div></div><div class="toolbar"><select id="ds"><option value="">选择景点</option></select><button class="btn btn-primary" onclick="loadDetail()">分析</button><button class="btn btn-ai" onclick="loadAISpot()">🤖 AI分析</button></div><div id="dr"><div class="loading"><p style="color:var(--t3)">选择景点 →</p></div></div></div>
+
+<div class="page" id="p-comparison">
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(251,146,60,.1)">⚖️</span>景点对比</div>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- 卡片化选择器 -->
+  <div class="cmp-selector-card">
+    <div class="cmp-selector-grid">
+      <div class="cmp-pick-card" data-idx="0">
+        <div class="cmp-pick-img-wrap">
+          <img class="cmp-pick-img" id="cmpImg0" src="/static/spot1.png" alt="景点1">
+          <div class="cmp-pick-overlay">点击切换</div>
+        </div>
+        <div class="cmp-pick-body">
+          <div class="cmp-pick-name" id="cmpName0">选择景点1</div>
+          <div class="cmp-pick-meta" id="cmpMeta0">-</div>
+          <select id="cs1" class="cmp-pick-select" onchange="onCmpSpotChange(0,this.value)">
+            <option value="">请选择...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cmp-vs-divider">VS</div>
+
+      <div class="cmp-pick-card" data-idx="1">
+        <div class="cmp-pick-img-wrap">
+          <img class="cmp-pick-img" id="cmpImg1" src="/static/spot2.png" alt="景点2">
+          <div class="cmp-pick-overlay">点击切换</div>
+        </div>
+        <div class="cmp-pick-body">
+          <div class="cmp-pick-name" id="cmpName1">选择景点2</div>
+          <div class="cmp-pick-meta" id="cmpMeta1">-</div>
+          <select id="cs2" class="cmp-pick-select" onchange="onCmpSpotChange(1,this.value)">
+            <option value="">请选择...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cmp-vs-divider">VS</div>
+
+      <div class="cmp-pick-card" data-idx="2">
+        <div class="cmp-pick-img-wrap">
+          <img class="cmp-pick-img" id="cmpImg2" src="/static/spot3.png" alt="景点3">
+          <div class="cmp-pick-overlay">点击切换</div>
+        </div>
+        <div class="cmp-pick-body">
+          <div class="cmp-pick-name" id="cmpName2">选择景点3（可选）</div>
+          <div class="cmp-pick-meta" id="cmpMeta2">-</div>
+          <select id="cs3" class="cmp-pick-select" onchange="onCmpSpotChange(2,this.value)">
+            <option value="">请选择...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="cmp-action-row">
+      <button class="cmp-action-btn" id="cmpActionBtn" onclick="loadCmp()" disabled>
+        🚀 开始对比
+      </button>
+    </div>
+  </div>
+
+  <!-- 对比结果区 -->
+  <div id="cr2"></div>
+</div>
+
+<div class="page" id="p-plan">
+
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(52,211,153,.1)">📋</span>旅游规划</div>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- ========== 主体：左景点选择 + 右行程预览 ========== -->
+  <div class="plan-main">
+
+    <!-- 左：景点卡片网格 -->
+    <div class="plan-spots-area">
+      <div class="plan-area-head">
+        <div>
+          <div class="plan-area-title">📚 选择想去的景点</div>
+          <div class="plan-area-hint">点击景点卡片即可加入行程</div>
+        </div>
+      </div>
+      <div class="plan-spots-grid collapsed" id="planSpots"></div>
+      <div class="plan-spots-more">
+        <button class="plan-more-btn" id="planMoreBtn" onclick="togglePlanMore()">
+          <span id="planMoreText">查看更多景点</span>
+          <span class="pmb-arrow" id="planMoreArrow">▼</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 右：实时行程预览 -->
+    <div class="plan-itinerary-area">
+      <div class="plan-area-head">
+        <div class="plan-area-title">📍 我的行程</div>
+        <button class="plan-clear-btn" onclick="clearItinerary()">清空全部</button>
+      </div>
+      <div class="plan-itinerary-list" id="planItinerary">
+        <div class="plan-empty">还未选择景点</div>
+      </div>
+
+      <!-- 行程地图 -->
+      <div class="plan-itinerary-map">
+        <div class="pim-head">
+          <div class="pim-title">🗺️ 行程地图</div>
+          <span class="pim-auto-hint">✨ 已按最优路径排序</span>
+        </div>
+        <div id="itineraryMap" class="pim-map">
+          <div class="map-empty">选择景点后将在此显示路线</div>
+        </div>
+      </div>
+
+      <div class="plan-itinerary-stats" id="planItineraryStats" style="display:none">
+        <div class="pis-row">
+          <span class="pis-label">预计游玩时间</span>
+          <span class="pis-val" id="pisDuration">-</span>
+        </div>
+        <div class="pis-hint">行程为 AI 推荐，可根据个人喜好调整</div>
+      </div>
+    </div>
+
+  </div>
+  <!-- /plan-main -->
+
+  <!-- ========== 旅行偏好 ========== -->
+  <div class="plan-prefs">
+    <div class="plan-prefs-head">
+      <div class="plan-prefs-title">🎨 旅行偏好</div>
+      <div class="plan-prefs-hint">告诉我们你的喜好，AI 会为你更精准地规划</div>
+    </div>
+    <div class="plan-prefs-grid">
+
+      <div class="pref-col">
+        <div class="pref-col-title">⏱️ 游览时长</div>
+        <div class="pref-options" data-pref="duration">
+          <div class="pref-card" data-val="半日游"><div class="pc-name">半日游</div><div class="pc-desc">4-5 小时</div></div>
+          <div class="pref-card on" data-val="一日游"><div class="pc-name">一日游</div><div class="pc-desc">全天行程</div></div>
+          <div class="pref-card" data-val="两日游"><div class="pc-name">两日游</div><div class="pc-desc">含住宿</div></div>
+        </div>
+      </div>
+
+      <div class="pref-col">
+        <div class="pref-col-title">🕐 出发时间</div>
+        <div class="pref-time-wrap">
+          <input type="time" id="planStartTime" value="08:30" class="pref-time-input">
+          <div class="pref-time-hint">建议早出发，避开人流高峰</div>
+        </div>
+        <!-- ✨ 旅行季节（下拉框版）-->
+        <div class="pref-col-title" style="margin-top:14px">🌸 旅行季节</div>
+        <div class="pref-season-wrap">
+          <select id="planSeason" class="pref-season-select">
+            <option value="不限" selected>🗓️ 不限 · AI综合推荐</option>
+            <option value="旺季">🌺 旺季出行 · 体验热闹氛围</option>
+            <option value="淡季">🍃 淡季出行 · 避开人流高峰</option>
+          </select>
+          <div class="pref-time-hint" id="seasonHint">AI 将综合推荐最佳出行时间</div>
+        </div>
+      </div>
+
+      <div class="pref-col">
+        <div class="pref-col-title">🚗 交通方式</div>
+        <div class="pref-options" data-pref="transport">
+          <div class="pref-card on" data-val="地铁+步行"><div class="pc-name">🚇 地铁+步行</div><div class="pc-desc">推荐公共交通</div></div>
+          <div class="pref-card" data-val="打车为主"><div class="pc-name">🚕 打车为主</div><div class="pc-desc">灵活便捷</div></div>
+          <div class="pref-card" data-val="自驾"><div class="pc-name">🚗 自驾</div><div class="pc-desc">自由随心</div></div>
+          <div class="pref-card" data-val="公交+步行"><div class="pc-name">🚌 公交+步行</div><div class="pc-desc">经济实惠</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- /plan-prefs -->
+
+  <!-- AI 生成结果区 -->
+  <div id="pr"></div>
+
+  <!-- 底部固定行动栏 -->
+  <div class="plan-action-bar" id="planActionBar">
+    <div class="pab-info">
+      <div class="pab-icon">🤖</div>
+      <div class="pab-stats">
+        <div class="pab-stat-main">已选 <span id="pabCount">0</span> 个景点</div>
+        <div class="pab-stat-sub">预计游玩 <span id="pabDuration">0</span> 小时</div>
+      </div>
+    </div>
+    <button class="pab-btn" id="planSubmitBtn" onclick="generateDayPlan()" disabled>
+      <span>✨ AI 生成行程路线</span>
+      <span class="pab-btn-arrow">→</span>
+    </button>
+  </div>
+
+</div>
+<!-- /p-plan -->
+
+<div class="page" id="p-operation">
+  <div class="section-header">
+    <div class="section-title"><span class="st-icon" style="background:rgba(167,139,250,.1)">🚀</span>运营模式</div>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- 1. AI 运营建议（挪到最上面） -->
+  <div class="card">
+    <div class="card-head">
+      <div class="ch-left"><span class="ch-icon" style="background:rgba(251,146,60,.1)">🤖</span><span class="ch-title">AI 运营建议</span></div>
+    </div>
+    <div class="toolbar" style="margin-top:6px">
+      <select id="ops"><option value="">选择景点</option></select>
+      <button class="btn btn-ai" onclick="loadAIOp()">🤖 生成 AI 运营报告</button>
+    </div>
+  </div>
+
+  <!-- 2. 运营预警面板 -->
+  <div class="card">
+    <div class="card-head">
+      <div class="ch-left">
+        <span class="ch-icon" style="background:rgba(232,168,124,.1)">🚨</span>
+        <span class="ch-title">运营预警面板</span>
+      </div>
+      <span class="ch-badge" id="alertSummary">分析中...</span>
+    </div>
+    <div id="alertContent" class="alert-content">
+      <div class="loading"><div class="spinner"></div>分析运营状况...</div>
+    </div>
+  </div>
+
+  <!-- 3. 节假日客流预测 -->
+  <div class="card">
+    <div class="card-head">
+      <div class="ch-left">
+        <span class="ch-icon" style="background:rgba(122,156,198,.1)">📅</span>
+        <span class="ch-title">节假日客流预测</span>
+      </div>
+    </div>
+    <div id="holidayContent">
+      <div class="loading"><div class="spinner"></div>预测客流...</div>
+    </div>
+  </div>
+
+  <!-- 5. 原有的成功因子 + 失望诊断 -->
+  <div id="or"><div class="loading"><div class="spinner"></div>加载中...</div></div>
+</div>
+</div>
+
+
+<div class="footer"><div class="footer-inner">
+  <div class="footer-top-row">
+    <div class="footer-brand"><div class="fb-name">🏯 探游中国</div><div class="fb-desc">基于公开数据的文旅目的地热度分析与可视化平台，通过大数据与AI助力文旅产业智慧运营。</div></div>
+    <div class="footer-nav">
+      <div class="fn-group"><h4>功能模块</h4><div class="fn-links"><a href="javascript:switchPage('rankings')">热度排名</a><span class="fn-dot">·</span><a href="javascript:switchPage('wordcloud')">词云分析</a><span class="fn-dot">·</span><a href="javascript:switchPage('detail')">深度分析</a><span class="fn-dot">·</span><a href="javascript:switchPage('comparison')">景点对比</a><span class="fn-dot">·</span><a href="javascript:switchPage('plan')">旅游规划</a><span class="fn-dot">·</span><a href="javascript:switchPage('operation')">运营模式</a></div></div>
+      <div class="fn-group"><h4>技术支撑</h4><div class="fn-links"><span>Flask + Python</span><span class="fn-dot">·</span><span>ECharts 可视化</span><span class="fn-dot">·</span><span>Jieba 中文分词</span><span class="fn-dot">·</span><span>MySQL 数据库</span><span class="fn-dot">·</span><span>Groq / 智谱 AI</span><span class="fn-dot">·</span><span>Selenium 爬虫</span></div></div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+  <span id="footerBottom">© 2025 探游中国 · 文旅热度分析平台</span>
+  <span class="footer-divider">|</span>
+  <span class="footer-update"> 数据更新：<span id="updateTime">--</span></span>
+  <span class="footer-divider">|</span>
+  <span id="dbStatusInfo" class="footer-update">🟢 数据加载中...</span>
+  <span class="footer-status">实时同步</span>
+</div>
+</div></div>
+<div class="back-top" id="backTop" onclick="window.scrollTo({top:0,behavior:'smooth'})"><span>↑</span></div>
+<div id="globalNegTooltip"></div>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
