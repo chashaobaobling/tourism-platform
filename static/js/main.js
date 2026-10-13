@@ -1,16 +1,16 @@
 var SPOT_IMAGES={
-  '陕西省历史博物馆':'/static/spot1.png',
-  '大唐芙蓉园':'/static/spot2.png',
-  '青龙寺':'/static/spot3.png',
-  '大雁塔':'/static/spot4.png',
-  '终南山南五台':'/static/spot5.png',
-  '西安城墙':'/static/spot6.png',
-  '西安博物院':'/static/spot7.png',
-  '钟楼':'/static/spot8.png',
-  '大唐不夜城':'/static/spot9.png',
-  '华清宫':'/static/spot10.png',
-  '兵马俑':'/static/spot11.png',
-  '白鹿原':'/static/spot12.png'
+  '陕西省历史博物馆':'/static/景点照片/spot1.png',
+  '大唐芙蓉园':'/static/景点照片/spot2.png',
+  '青龙寺':'/static/景点照片/spot3.png',
+  '大雁塔':'/static/景点照片/spot4.png',
+  '终南山南五台':'/static/景点照片/spot5.png',
+  '西安城墙':'/static/景点照片/spot6.png',
+  '西安博物院':'/static/景点照片/spot7.png',
+  '钟楼':'/static/景点照片/spot8.png',
+  '大唐不夜城':'/static/景点照片/spot9.png',
+  '华清宫':'/static/景点照片/spot10.png',
+  '兵马俑':'/static/景点照片/spot11.png',
+  '白鹿原':'/static/景点照片/spot12.png'
 };
 var SPOT_INTRO={
   '陕西省历史博物馆':{
@@ -578,7 +578,7 @@ function initCmpSelector(){
   cmpSelectedSpots = ['', '', ''];
   for(var i=0;i<3;i++){
     var img = document.getElementById('cmpImg'+i);
-    if(img) img.src = '/static/spot' + (i+1) + '.png';
+    if(img) img.src = '/static/景点照片/spot' + (i+1) + '.png';
     var name = document.getElementById('cmpName'+i);
     if(name) name.textContent = i<2 ? '选择景点'+(i+1) : '选择景点3（可选）';
     var meta = document.getElementById('cmpMeta'+i);
@@ -639,7 +639,7 @@ function onCmpSpotChange(idx, spotName){
     }
   } else {
     if(card) card.classList.remove('filled');
-    if(img) img.src = '/static/spot' + (idx+1) + '.png';
+    if(img) img.src = '/static/景点照片/spot' + (idx+1) + '.png';
     if(name) name.textContent = idx<2 ? '选择景点'+(idx+1) : '选择景点3（可选）';
     if(meta) meta.textContent = '-';
   }
@@ -943,7 +943,7 @@ function renderCompactRankList(top5){
   listEl.innerHTML=top5.map(function(item,i){
     var rk=i+1;
     var rkCls=rk<=3?'r'+rk:'ro';
-    var img=SPOT_IMAGES[item.spot_name]||'/static/spot1.png';
+    var img=SPOT_IMAGES[item.spot_name]||'/static/景点照片/spot1.png';
     var score=getScore(item);
     var pct=(score/maxScore*100).toFixed(0);
     return '<div class="rank-item" onclick="goDetail(\''+item.spot_name+'\')">'
@@ -1008,7 +1008,7 @@ function renderCompactQualityList(top5){
   listEl.innerHTML = top5.map(function(item, i){
     var rk = i + 1;
     var rkCls = rk <= 3 ? 'r' + rk : 'ro';
-    var img = SPOT_IMAGES[item.spot_name] || '/static/spot1.png';
+    var img = SPOT_IMAGES[item.spot_name] || '/static/景点照片/spot1.png';
     var pct = (item.quality_score / maxScore * 100).toFixed(0);
 
     return '<div class="rank-item-quality" onclick="goDetail(\'' + item.spot_name + '\')">'
@@ -1118,7 +1118,7 @@ function renderFullRankings(data, overview){
   function buildCard(item, i){
     var rk = i + 1;
     var rkC = rk <= 3 ? 'cc-rk' + rk : 'cc-rko';
-    var img = SPOT_IMAGES[item.spot_name] || '/static/spot1.png';
+    var img = SPOT_IMAGES[item.spot_name] || '/static/景点照片/spot1.png';
     var score = getScore(item);
     var avgScore = item.avg_score || 0;
     var stars = '';
@@ -1253,7 +1253,7 @@ async function loadHotPotential(){
   }
 
   listEl.innerHTML=data.map(function(item,i){
-    var img=SPOT_IMAGES[item.spot_name]||'/static/spot1.png';
+    var img=SPOT_IMAGES[item.spot_name]||'/static/景点照片/spot1.png';
     var growthSign=item.growth_rate>=0?'+':'';
     return '<div class="potential-item" onclick="switchPage(\'prediction\')">'
       +'<div class="potential-thumb"><img src="'+img+'" alt="'+item.spot_name+'" onerror="this.style.display=\'none\'"></div>'
@@ -2260,7 +2260,7 @@ function initPlanSpots(){
   if(!container||!spots.length)return;
 
   container.innerHTML=spots.map(function(s){
-    var img=SPOT_IMAGES[s]||'/static/spot1.png';
+    var img=SPOT_IMAGES[s]||'/static/景点照片/spot1.png';
     var meta=(typeof SPOT_META!=='undefined'&&SPOT_META[s])?SPOT_META[s]:{level:'-',duration:'2-3小时',address:'西安市'};
     var rank=rankData.find(function(d){return d.spot_name===s});
     var rating=rank?rank.avg_score:'-';
@@ -2270,7 +2270,7 @@ function initPlanSpots(){
 
     return '<div class="spot-pick-card" data-spot="'+s+'" onclick="togglePlanSpot(this)">'
       +'<div class="spc-img-wrap">'
-      +'<img class="spc-img" src="'+img+'" alt="'+s+'" onerror="this.src=\'/static/spot1.png\'">'
+      +'<img class="spc-img" src="'+img+'" alt="'+s+'" onerror="this.src=\'/static/景点照片/spot1.png\'">'
       +'<div class="spc-check"><span>✓</span></div>'
       +'</div>'
       +'<div class="spc-body">'
@@ -3422,7 +3422,7 @@ async function loadDetail(){
   if(!d){document.getElementById('dr').innerHTML='<div class="loading"><p>未找到</p></div>';return}
 
   var cv=d.competitiveness||{};
-  var img=SPOT_IMAGES[spot]||'/static/spot1.png';
+  var img=SPOT_IMAGES[spot]||'/static/景点照片/spot1.png';
   var intro=SPOT_INTRO[spot]||{type:'文化景点',desc:['暂无介绍']};
   var stars='';
   var roundedScore=Math.round(d.avg_score);
@@ -3440,7 +3440,7 @@ async function loadDetail(){
 
   // 左半：图
   html+='<div class="hero-img-half">'
-    +'<img class="hero-img" src="'+img+'" alt="'+spot+'" onerror="this.src=\'/static/spot1.png\'">'
+    +'<img class="hero-img" src="'+img+'" alt="'+spot+'" onerror="this.src=\'/static/景点照片/spot1.png\'">'
     +'<div class="hero-img-overlay">'
     +'<div class="hero-name-row"><span class="hero-name">'+spot+'</span><span class="hero-type-badge">'+typeIcon+' '+intro.type+'</span></div>'
     +'<div class="hero-addr">📍 '+meta.address+'</div>'
