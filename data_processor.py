@@ -19,6 +19,10 @@ import random
 from collections import Counter, defaultdict
 from sklearn.linear_model import LinearRegression
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load project-root .env before reading the API keys below.
+load_dotenv()
 
 warnings.filterwarnings('ignore')
 
@@ -30,12 +34,12 @@ STOP_WORDS_PATH = r"C:\Users\wangjing\自然语言处理NLP\data\stop_words.utf8
 # Groq（国外，性能好，需翻墙）
 AI_GROQ_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 AI_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-AI_GROQ_MODEL = "llama-3.3-70b-versatile"
+AI_GROQ_MODEL = "openai/gpt-oss-120b"
 
 # 智谱AI（国内，免费，不用翻墙）
 AI_ZHIPU_KEY = os.environ.get("ZHIPU_API_KEY", "").strip()
 AI_ZHIPU_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-AI_ZHIPU_MODEL = "glm-4-flash"
+AI_ZHIPU_MODEL = "glm-4.7-flash"
 
 # 默认使用哪个：'groq' 或 'zhipu'
 AI_DEFAULT_ENGINE = "groq"
@@ -515,7 +519,7 @@ class TourismDataProcessor:
                     continue
 
                 else:
-                    print(f"[WARNING] AI({engine})返回{resp.status_code}")
+                    print(f"[WARNING] AI({engine}/{model})返回{resp.status_code}")
                     if engine == 'groq' and AI_ZHIPU_KEY:
                         print("[INFO] Groq异常，切换智谱")
                         return self._call_ai(prompt, max_tokens, engine='zhipu')
@@ -3096,6 +3100,19 @@ class TourismDataProcessor:
                     'end_date': end_date,
                     'duration': duration,
                 }
+
+        # chinese_calendar only contains officially announced data through a
+        # limited year range. If the current year's holidays are exhausted,
+        # the next fixed-date statutory holiday is New Year's Day. Do not guess
+        # any adjusted days off for the following year.
+        next_new_year = date(today.year + 1, 1, 1)
+        if next_new_year > today:
+            return {
+                'name': '元旦',
+                'start_date': next_new_year,
+                'end_date': next_new_year,
+                'duration': 1,
+            }
 
         return None
 
