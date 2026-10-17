@@ -12,7 +12,7 @@ Changes made:
 
 Notes:
 - This patch avoids modifying data_processor.py to minimize behavioral risk. The background thread constructs the real TourismDataProcessor instance.
-- Only one background thread performs initialization; thread-safety is ensured by acquiring a lock during assignment.
+- Ensure only one initialization thread is started (fixing previous race condition).
 """
 
 from flask import Flask, render_template, jsonify, request, send_from_directory
@@ -49,6 +49,8 @@ logger = logging.getLogger(__name__)
 # Module-level processor holder and state
 processor = None
 processor_lock = threading.Lock()
+# Lock to guard initialization start to avoid multiple threads starting concurrently
+init_start_lock = threading.Lock()
 processor_init_error = None
 processor_init_started = False
 
@@ -76,10 +78,12 @@ def _initialize_processor_in_background():
 # Start background initialization lazily on first request if not already started
 def ensure_processor_initialization():
     global processor_init_started
-    if processor is None and not processor_init_started:
-        processor_init_started = True
-        t = threading.Thread(target=_initialize_processor_in_background, daemon=True)
-        t.start()
+    # Use a lock to ensure only one thread can start the initializer
+    with init_start_lock:
+        if processor is None and not processor_init_started:
+            processor_init_started = True
+            t = threading.Thread(target=_initialize_processor_in_background, daemon=True)
+            t.start()
 
 
 @app.before_request
@@ -485,7 +489,7 @@ def api_district_heat():
             '兵马俑': '临潼区',
             '华清宫': '临潼区',
             '终南山南五台': '长安区',
-            '白��原': '灞桥区'
+            '白鹿原': '灞桥区'
         }
 
         rankings = processor.get_spot_rankings(top_n=100)
