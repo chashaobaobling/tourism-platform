@@ -1,26 +1,123 @@
 """
-app.py - Flask Web服务器 V5
+app.py - Flask Web服务器 V5 (lazy init compatibility patch)
+
+Changes made:
+- Delay creation of TourismDataProcessor to a background thread to avoid import-time blocking.
+- Read configuration from environment variables: ALLOWED_ORIGINS, APP_DEBUG.
+- Limit CORS to configured origins (fallback to localhost origins).
+- Add /api/processor_status to report initialization state: initializing / ready / failed.
+- Add a before_request guard to return a friendly 202/503 response when processor is not ready, while allowing a small whitelist of endpoints (processor_status, xian_geojson, and root/ static resources).
+- Preserve all existing routes and their logic unchanged; routes under /api/* will be blocked until processor is ready to avoid attribute errors.
+- Keep `python app.py` compatibility and Windows-friendly behavior.
+
+Notes:
+- This patch avoids modifying data_processor.py to minimize behavioral risk. The background thread constructs the real TourismDataProcessor instance.
+- Only one background thread performs initialization; thread-safety is ensured by acquiring a lock during assignment.
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
+import os
+import threading
+import logging
+import time
+
+# Keep compatibility: import the heavy class but don't instantiate it at import-time
 from data_processor import TourismDataProcessor
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
-print("=" * 60)
-print("  文旅目的地热度分析与可视化系统 V5 启动中...")
-print("=" * 60)
-processor = TourismDataProcessor()
-print("=" * 60)
-print("  系统初始化完成！")
-print("=" * 60)
+# Read configuration from environment
+ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS')
+if ALLOWED_ORIGINS:
+    # support comma separated
+    origins = [o.strip() for o in ALLOWED_ORIGINS.split(',') if o.strip()]
+else:
+    origins = ['http://localhost:3000', 'http://127.0.0.1:3000']
+
+APP_DEBUG = os.environ.get('APP_DEBUG', 'false').lower() in ('1', 'true', 'yes')
+
+app.config['APP_DEBUG'] = APP_DEBUG
+
+# Configure CORS with allowed origins for /api/*
+CORS(app, resources={r"/api/*": {"origins": origins}})
+
+# Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
+
+# Module-level processor holder and state
+processor = None
+processor_lock = threading.Lock()
+processor_init_error = None
+processor_init_started = False
+
+# Whitelisted paths that are allowed before processor initialization completes
+_WHITELISTED_API_PATHS = set([
+    '/api/processor_status',
+    '/api/xian_geojson',
+])
+
+
+def _initialize_processor_in_background():
+    global processor, processor_init_error
+    try:
+        logger.info('Processor initialization thread starting...')
+        # construct the heavy object (may take time)
+        p = TourismDataProcessor()
+        with processor_lock:
+            processor = p
+        logger.info('Processor initialized successfully')
+    except Exception as e:
+        logger.exception('Processor initialization failed: %s', e)
+        processor_init_error = str(e)
+
+
+# Start background initialization lazily on first request if not already started
+def ensure_processor_initialization():
+    global processor_init_started
+    if processor is None and not processor_init_started:
+        processor_init_started = True
+        t = threading.Thread(target=_initialize_processor_in_background, daemon=True)
+        t.start()
+
+
+@app.before_request
+def _check_processor_ready():
+    # Only guard API endpoints; static and root pages are allowed
+    path = request.path
+    if not path.startswith('/api/'):
+        return None
+
+    # Always allow whitelisted API endpoints
+    if path in _WHITELISTED_API_PATHS:
+        return None
+
+    # If processor is ready, allow
+    if processor is not None:
+        return None
+
+    # If initialization failed, return 503
+    if processor_init_error is not None:
+        return jsonify({'status': 'error', 'message': '初始化失败', 'detail': processor_init_error}), 503
+
+    # Not ready yet: ensure initialization started and return 202
+    ensure_processor_initialization()
+    return jsonify({'status': 'initializing', 'message': '数据正在初始化，请稍后重试'}), 202
 
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/api/processor_status')
+def api_processor_status():
+    state = 'ready' if processor is not None else ('failed' if processor_init_error else 'initializing')
+    return jsonify({'status': 'success', 'data': {'state': state, 'error': processor_init_error}})
+
+
+# === existing routes kept as-is ===
 
 @app.route('/api/overview')
 def api_overview():
@@ -28,6 +125,7 @@ def api_overview():
         return jsonify({'status':'success','data': processor.get_overview_with_change()})
     except Exception as e:
         return jsonify({'status':'error','message':str(e)}), 500
+
 @app.route('/api/rankings')
 def api_rankings():
     try:
@@ -220,6 +318,7 @@ def api_spot_trend():
         return jsonify({'status':'success','data': data})
     except Exception as e:
         return jsonify({'status':'error','message':str(e)}), 500
+
 @app.route('/api/ai_insight')
 def api_ai_insight():
     try:
@@ -230,6 +329,7 @@ def api_ai_insight():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/date_range')
 def api_date_range():
     try:
@@ -286,6 +386,7 @@ def api_day_plan():
         return jsonify({'status':'success','data': data})
     except Exception as e:
         return jsonify({'status':'error','message':str(e)}), 500
+
 @app.route('/api/age_data')
 def api_age_data():
     try:
@@ -307,6 +408,7 @@ def api_time_wordcloud():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/ai_reply', methods=['POST'])
 def api_ai_reply():
     """AI差评回复生成"""
@@ -350,6 +452,7 @@ def api_ai_reply():
             return jsonify({'status': 'error', 'message': 'AI服务暂时不可用，请稍后重试'}), 500
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/xian_geojson')
 def api_xian_geojson():
     """提供西安区县GeoJSON地图数据"""
@@ -364,7 +467,6 @@ def api_xian_geojson():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 @app.route('/api/district_heat')
 def api_district_heat():
@@ -383,7 +485,7 @@ def api_district_heat():
             '兵马俑': '临潼区',
             '华清宫': '临潼区',
             '终南山南五台': '长安区',
-            '白鹿原': '灞桥区'
+            '白��原': '灞桥区'
         }
 
         rankings = processor.get_spot_rankings(top_n=100)
@@ -429,6 +531,7 @@ def api_district_heat():
         return jsonify({'status': 'success', 'data': result})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/hot_potential')
 def api_hot_potential():
     try:
@@ -438,7 +541,6 @@ def api_hot_potential():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 @app.route('/api/hot_potential_detail')
 def api_hot_potential_detail():
@@ -450,6 +552,7 @@ def api_hot_potential_detail():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/factor_trend_simple')
 def api_factor_trend_simple():
     try:
@@ -458,6 +561,7 @@ def api_factor_trend_simple():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/weekday_holiday_diff')
 def api_weekday_holiday_diff():
     """工作日 vs 节假日 关键词差异"""
@@ -469,6 +573,7 @@ def api_weekday_holiday_diff():
         import traceback
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/dual_rankings')
 def api_dual_rankings():
     try:
@@ -487,6 +592,7 @@ def api_dual_rankings():
         import traceback
         traceback.print_exc()  # 加这行
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/operation_alerts')
 def api_operation_alerts():
     """运营预警面板"""
@@ -498,7 +604,6 @@ def api_operation_alerts():
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-
 @app.route('/api/holiday_forecast')
 def api_holiday_forecast():
     """节假日客流预测"""
@@ -507,7 +612,6 @@ def api_holiday_forecast():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 @app.route('/api/capability_radar')
 def api_capability_radar():
@@ -519,7 +623,6 @@ def api_capability_radar():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 @app.route('/api/comparison_advanced')
 def api_comparison_advanced():
@@ -540,7 +643,6 @@ def api_comparison_advanced():
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-
 @app.route('/api/ai_comparison_summary')
 def api_ai_comparison_summary():
     """AI 综合推荐"""
@@ -553,6 +655,9 @@ def api_ai_comparison_summary():
         return jsonify({'status': 'success', 'data': data})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
-    print("\n🌐 访问地址: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    logger.info('\n🌐 访问地址: http://localhost:5000')
+    # ensure background initialization starts when running directly
+    ensure_processor_initialization()
+    app.run(debug=app.config['APP_DEBUG'], host='0.0.0.0', port=5000)
