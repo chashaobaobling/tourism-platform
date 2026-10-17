@@ -39,7 +39,7 @@ AI_GROQ_MODEL = "openai/gpt-oss-120b"
 # 智谱AI（国内，免费，不用翻墙）
 AI_ZHIPU_KEY = os.environ.get("ZHIPU_API_KEY", "").strip()
 AI_ZHIPU_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-AI_ZHIPU_MODEL = "glm-4.7-flash"
+AI_ZHIPU_MODEL = "glm-4-flash"
 
 # 默认使用哪个：'groq' 或 'zhipu'
 AI_DEFAULT_ENGINE = "groq"
