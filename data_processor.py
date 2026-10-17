@@ -519,7 +519,23 @@ class TourismDataProcessor:
                     continue
 
                 else:
+                    # Provider error details distinguish invalid credentials,
+                    # unavailable models, and quota issues. Never log the key.
+                    try:
+                        error_data = resp.json()
+                        if isinstance(error_data, dict):
+                            error_obj = error_data.get('error', error_data)
+                            if isinstance(error_obj, dict):
+                                error_detail = error_obj.get('message') or error_obj.get('code') or str(error_obj)
+                            else:
+                                error_detail = str(error_obj)
+                        else:
+                            error_detail = str(error_data)
+                    except Exception:
+                        error_detail = resp.text
+                    error_detail = str(error_detail).replace(api_key, '[REDACTED]').replace('\n', ' ')[:400]
                     print(f"[WARNING] AI({engine}/{model})返回{resp.status_code}")
+                    print(f"[WARNING] AI({engine}/{model})返回{resp.status_code}: {error_detail}")
                     if engine == 'groq' and AI_ZHIPU_KEY:
                         print("[INFO] Groq异常，切换智谱")
                         return self._call_ai(prompt, max_tokens, engine='zhipu')
