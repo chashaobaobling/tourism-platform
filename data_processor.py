@@ -109,11 +109,10 @@ class TourismDataProcessor:
             from database import TourismDatabase
             self._db = TourismDatabase()
             if self._db.is_connected():
-                # 如果数据库为空，从CSV导入
+                # Startup must never bypass the review queue with a silent CSV import.
                 count = self._db.get_total_count()
                 if count == 0:
-                    print("[INFO] 数据库为空，从CSV初始导入...")
-                    self._db.init_from_csv()
+                    print("[INFO] 数据库为空；请在评论审核工作台导入并审核 CSV 数据")
                 else:
                     print(f"[INFO] 数据库已有 {count} 条数据")
                 self._current_count = self._db.get_total_count()

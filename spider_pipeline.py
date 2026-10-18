@@ -1,5 +1,5 @@
 """
-spider_pipeline.py - 爬虫+预处理+数据库写入 整合管道
+spider_pipeline.py - 爬虫+预处理+评论审核批次 整合管道
 使用方式：python spider_pipeline.py
 """
 
@@ -87,12 +87,12 @@ def scrape_single_comment(driver, element):
         try:
             username = element.find_element(By.CSS_SELECTOR, "div.userInfo div.userName").text.strip()
         except:
-            username = "未知用户"
+            username = ""
 
         try:
             rating_text = element.find_element(By.CSS_SELECTOR, "div.contentInfo div.scroreInfo span").text.strip()
         except:
-            rating_text = "5"
+            rating_text = ""
 
         try:
             content = element.find_element(By.CSS_SELECTOR, "div.contentInfo div.commentDetail").text.strip()
@@ -193,7 +193,7 @@ def click_next_page(driver):
     return False
 
 
-def scrape_spot(spot_name, url, pages):
+def scrape_spot(spot_name, url, pages, headless=False):
     """爬取指定景点"""
     print(f"\n{'='*50}")
     print(f"开始爬取：{spot_name}")
@@ -205,7 +205,7 @@ def scrape_spot(spot_name, url, pages):
     all_reviews = []
 
     try:
-        driver = create_edge_driver()
+        driver = create_edge_driver(headless=headless)
         driver.get(url)
 
         WebDriverWait(driver, 15).until(
@@ -250,11 +250,11 @@ def clean_score(score_raw):
     """
     try:
         if pd.isna(score_raw) or str(score_raw).strip() == '':
-            return 5
+            return None
         s = str(score_raw).strip()
         match = re.search(r"(\d+\.?\d*)", s)
         if not match:
-            return 5
+            return None
         val = float(match.group(1))
 
         # 百分制 → 5分制
@@ -269,7 +269,7 @@ def clean_score(score_raw):
         val = max(1, min(5, int(val)))
         return val
     except:
-        return 5
+        return None
 
 
 def clean_date(date_str):
@@ -318,9 +318,11 @@ def preprocess_reviews(spot_name, raw_reviews):
         if len(content) < 3:
             continue
 
-        score = clean_score(r.get('rating_raw', '5'))
+        score = clean_score(r.get('rating_raw', ''))
+        if score is None:
+            continue
         date = clean_date(r.get('date', ''))
-        username = str(r.get('username', '未知用户')).strip()
+        username = str(r.get('username', '')).strip()
 
         rows.append({
             'spot_name':       spot_name,
@@ -336,75 +338,12 @@ def preprocess_reviews(spot_name, raw_reviews):
 
     df = pd.DataFrame(rows)
 
-    # 去重（同景点+同内容）
-    df = df.drop_duplicates(subset=['spot_name', 'comment'], keep='first')
-
     print(f"\n预处理结果：")
     print(f"  有效评论：{len(df)} 条")
     print(f"  评分分布：{df['sentiment_score'].value_counts().sort_index().to_dict()}")
     print(f"  平均评分：{df['sentiment_score'].mean():.2f}")
 
     return df
-
-
-# ==================== 写入数据库 ====================
-
-def save_to_database(df, spot_name):
-    """写入MySQL数据库"""
-    if df.empty:
-        print("无数据可写入")
-        return 0
-
-    try:
-        from database import TourismDatabase
-        db = TourismDatabase()
-        if not db.is_connected():
-            print("数据库未连接，跳过写入")
-            return 0
-
-        # 检查该景点已有多少条
-        from sqlalchemy import text
-        with db.engine.connect() as conn:
-            existing = conn.execute(
-                text("SELECT COUNT(*) FROM comments WHERE spot_name=:name"),
-                {'name': spot_name}
-            ).scalar()
-
-        print(f"数据库中「{spot_name}」已有 {existing} 条")
-
-        # 去掉数据库已有的重复内容
-        if existing > 0:
-            # ✅ 参数化查询
-            from sqlalchemy import text
-            with db.engine.connect() as conn:
-                existing_df = pd.read_sql(
-                    text("SELECT comment FROM comments WHERE spot_name=:name"),
-                    conn,
-                    params={'name': spot_name}
-                )
-            existing_contents = set(existing_df['comment'].tolist())
-            df_new = df[~df['comment'].isin(existing_contents)].copy()
-            print(f"过滤已存在评论后剩余：{len(df_new)} 条")
-        else:
-            df_new = df.copy()
-
-        if df_new.empty:
-            print("无新评论可写入（全部已存在）")
-            return 0
-
-        # 写入数据库
-        count = db.batch_add_comments(df_new)
-        print(f"✅ 成功写入 {count} 条到数据库")
-        return count
-
-    except ImportError:
-        print("database.py未找到，跳过数据库写入")
-        return 0
-    except Exception as e:
-        print(f"写入数据库失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return 0
 
 
 # ==================== 备份到CSV ====================
@@ -496,10 +435,11 @@ def main():
         print("预处理后无有效数据")
         return
 
-    # 3. 写入数据库
+    # 3. 进入人工审核暂存区，不绕过模型和人工复核直接写正式表。
     print("\n" + "="*40)
-    print("写入数据库...")
-    db_count = save_to_database(df, spot_name)
+    print("创建评论审核批次...")
+    from review.service import create_rows_batch
+    batch_id = create_rows_batch(df.to_dict('records'), 'ctrip', spot_name=spot_name)
 
     # 4. CSV备份
     print("\n备份CSV...")
@@ -511,8 +451,8 @@ def main():
     print(f"   景点名称：{spot_name}")
     print(f"   爬取评论：{len(raw_reviews)} 条（含重复）")
     print(f"   有效评论：{len(df)} 条（去重后）")
-    print(f"   写入数据库：{db_count} 条（过滤已存在）")
-    print(f"   系统将在10分钟内自动更新分析结果")
+    print(f"   审核批次：{batch_id}")
+    print(f"   数据未直接写入数据库，请打开网页的「数据审核」完成复核和发布")
     print("="*60)
 
 

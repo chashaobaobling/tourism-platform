@@ -12,6 +12,60 @@ var SPOT_IMAGES={
   '兵马俑':'/static/景点照片/spot11.png',
   '白鹿原':'/static/景点照片/spot12.png'
 };
+var SPOT_3D_MODELS={
+  '大雁塔':{
+    id:'0f669b923c7c4ec98a699ff9342f017d',
+    url:'https://sketchfab.com/3d-models/giant-wild-goose-pagoda-0f669b923c7c4ec98a699ff9342f017d'
+  },
+  '钟楼':{
+    id:'aeab462f18ab4347bfa0b943efe97b8b',
+    url:'https://sketchfab.com/3d-models/the-bell-tower-of-xian-aeab462f18ab4347bfa0b943efe97b8b'
+  },
+  '兵马俑':{
+    id:'c3c7b97bc4f044bfbac59d78233e9a2c',
+    url:'https://sketchfab.com/3d-models/terracotta-general-figure-qin-dynastychina-c3c7b97bc4f044bfbac59d78233e9a2c'
+  }
+};
+
+var spot3DPreviousOverflow='';
+function openSpot3DModel(){
+  var modal=document.getElementById('spot3DModal');
+  if(!modal)return;
+  var frame=modal.querySelector('.sketchfab-frame');
+  var modelId=frame&&frame.getAttribute('data-model-id');
+  if(!frame||!modelId)return;
+  if(!frame.src||frame.src==='about:blank'){
+    frame.src='https://sketchfab.com/models/'+modelId+'/embed?autostart=1&ui_theme=dark';
+  }
+  spot3DPreviousOverflow=document.body.style.overflow;
+  document.body.style.overflow='hidden';
+  modal.hidden=false;
+  modal.setAttribute('aria-hidden','false');
+  var closeButton=modal.querySelector('.sketchfab-close');
+  if(closeButton)closeButton.focus();
+  document.addEventListener('keydown',handleSpot3DKeydown);
+}
+function closeSpot3DModel(){
+  var modal=document.getElementById('spot3DModal');
+  if(!modal)return;
+  var frame=modal.querySelector('.sketchfab-frame');
+  if(frame)frame.src='about:blank';
+  modal.hidden=true;
+  modal.setAttribute('aria-hidden','true');
+  document.body.style.overflow=spot3DPreviousOverflow;
+  document.removeEventListener('keydown',handleSpot3DKeydown);
+  var trigger=document.querySelector('.hero-name-3d');
+  if(trigger)trigger.focus();
+}
+function handleSpot3DKeydown(event){
+  if(event.key==='Escape')closeSpot3DModel();
+}
+function fullscreenSpot3DModel(){
+  var dialog=document.querySelector('#spot3DModal .sketchfab-dialog');
+  if(!dialog)return;
+  if(dialog.requestFullscreen)dialog.requestFullscreen();
+  else if(dialog.webkitRequestFullscreen)dialog.webkitRequestFullscreen();
+}
 var SPOT_INTRO={
   '陕西省历史博物馆':{
     type:'文化景点',
@@ -3424,6 +3478,7 @@ async function loadDetail(){
   var cv=d.competitiveness||{};
   var img=SPOT_IMAGES[spot]||'/static/景点照片/spot1.png';
   var intro=SPOT_INTRO[spot]||{type:'文化景点',desc:['暂无介绍']};
+  var model3D=SPOT_3D_MODELS[spot];
   var stars='';
   var roundedScore=Math.round(d.avg_score);
   for(var si=0;si<5;si++) stars+='<span class="star'+(si<roundedScore?'':' off')+'">'+(si<roundedScore?'★':'☆')+'</span>';
@@ -3442,7 +3497,10 @@ async function loadDetail(){
   html+='<div class="hero-img-half">'
     +'<img class="hero-img" src="'+img+'" alt="'+spot+'" onerror="this.src=\'/static/景点照片/spot1.png\'">'
     +'<div class="hero-img-overlay">'
-    +'<div class="hero-name-row"><span class="hero-name">'+spot+'</span><span class="hero-type-badge">'+typeIcon+' '+intro.type+'</span></div>'
+    +'<div class="hero-name-row">'
+    +(model3D?'<button class="hero-name hero-name-3d" type="button" onclick="openSpot3DModel()" aria-label="点击查看'+spot+'的3D模型">'+spot+' <span aria-hidden="true">🧊</span></button>':'<span class="hero-name">'+spot+'</span>')
+    +'<span class="hero-type-badge">'+typeIcon+' '+intro.type+'</span></div>'
+    +(model3D?'<div class="hero-3d-hint">点击景点名称，查看可交互 3D 模型</div>':'')
     +'<div class="hero-addr">📍 '+meta.address+'</div>'
     +'<div class="hero-meta-row">'
     +'<div class="hero-meta-item"><div class="hmi-label">景区等级</div><div class="hmi-value">'+meta.level+'</div></div>'
@@ -3488,6 +3546,19 @@ async function loadDetail(){
     +'</div>';
 
   html+='</div>'; // /detail-hero
+
+  // 模型弹窗默认不加载，点击景点名称后再打开
+  if(model3D){
+    html+='<div class="sketchfab-modal" id="spot3DModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="'+spot+' 3D 模型" hidden>'
+      +'<div class="sketchfab-backdrop" onclick="closeSpot3DModel()"></div>'
+      +'<div class="sketchfab-dialog">'
+      +'<div class="sketchfab-toolbar"><div class="sketchfab-modal-title">'+spot+' 3D 模型</div>'
+      +'<a class="sketchfab-source" href="'+model3D.url+'" target="_blank" rel="noopener noreferrer">模型来源：Sketchfab ↗</a>'
+      +'<div class="sketchfab-actions"><button type="button" onclick="fullscreenSpot3DModel()" aria-label="全屏观看3D模型">⛶ 全屏</button><button type="button" class="sketchfab-close" onclick="closeSpot3DModel()" aria-label="关闭3D模型">✕</button></div></div>'
+      +'<div class="sketchfab-frame-wrap"><iframe class="sketchfab-frame" data-model-id="'+model3D.id+'" title="'+spot+' 3D 模型（Sketchfab）" src="about:blank" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe></div>'
+      +'<div class="sketchfab-modal-hint">拖动旋转模型，滚轮缩放；点击“全屏”可全屏观看</div>'
+      +'</div></div>';
+  }
 
   // ========== 第二行：热度趋势 + 高频词云 ==========
     var trendDateHint = dataMaxDate ? '<span style="font-size:11px;color:var(--t3);margin-left:8px">📅 数据更新至 '+dataMaxDate+'</span>' : '';

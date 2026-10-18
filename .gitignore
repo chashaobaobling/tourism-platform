@@ -3,3 +3,5 @@ __pycache__/
 *.py[cod]
 .idea/
 .env
+data/review_staging.sqlite3
+models/*.keras

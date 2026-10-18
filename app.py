@@ -2,17 +2,25 @@
 app.py - Flask Web服务器 V5
 """
 
+import io
+import os
+from urllib.parse import urlparse
+
+import pandas as pd
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 from data_processor import TourismDataProcessor
 
 app = Flask(__name__)
 CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
 
 print("=" * 60)
 print("  文旅目的地热度分析与可视化系统 V5 启动中...")
 print("=" * 60)
 processor = TourismDataProcessor()
+from review.service import set_refresh_callback
+set_refresh_callback(processor.force_full_reload)
 print("=" * 60)
 print("  系统初始化完成！")
 print("=" * 60)
@@ -21,6 +29,172 @@ print("=" * 60)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/review')
+def review_workspace():
+    """独立的评论数据审核工作台"""
+    return render_template('review.html')
+
+
+@app.route('/api/review/model-status')
+def api_review_model_status():
+    """返回可替换情感模型的加载状态，不触发评论推理。"""
+    try:
+        from review.model_adapter import model_status
+        return jsonify({'status': 'success', 'data': model_status()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/batches/latest')
+def api_review_latest_batch():
+    try:
+        from review import store
+        batch = store.get_latest_batch()
+        if not batch:
+            return jsonify({'status': 'success', 'data': None})
+        page = max(1, request.args.get('page', 1, type=int))
+        status_filter = request.args.get('filter', 'all')
+        data = store.list_items(batch['batch_id'], page=page, page_size=25, status=status_filter)
+        return jsonify({'status': 'success', 'data': {'batch': batch, **data}})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/batches/<batch_id>')
+def api_review_batch(batch_id):
+    try:
+        from review import store
+        batch = store.get_batch(batch_id)
+        if not batch:
+            return jsonify({'status': 'error', 'message': '找不到审核批次'}), 404
+        page = max(1, request.args.get('page', 1, type=int))
+        status_filter = request.args.get('filter', 'all')
+        data = store.list_items(batch_id, page=page, page_size=25, status=status_filter)
+        return jsonify({'status': 'success', 'data': {'batch': batch, **data}})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/csv', methods=['POST'])
+def api_review_import_csv():
+    uploaded = request.files.get('file')
+    if uploaded is None or not uploaded.filename:
+        return jsonify({'status': 'error', 'message': '请选择 CSV 文件'}), 400
+    if not uploaded.filename.lower().endswith('.csv'):
+        return jsonify({'status': 'error', 'message': '目前只接受 .csv 文件'}), 400
+    payload = uploaded.read()
+    if not payload:
+        return jsonify({'status': 'error', 'message': 'CSV 文件为空'}), 400
+    frame = None
+    for encoding in ('utf-8-sig', 'utf-8', 'gbk', 'gb2312'):
+        try:
+            frame = pd.read_csv(io.BytesIO(payload), encoding=encoding, dtype=str, keep_default_na=False)
+            break
+        except (UnicodeDecodeError, pd.errors.ParserError):
+            continue
+    if frame is None:
+        return jsonify({'status': 'error', 'message': 'CSV 无法解析，请检查编码和格式'}), 400
+
+    aliases = {
+        '景点名称': 'spot_name', '景点': 'spot_name', 'spot_name': 'spot_name',
+        '评论': 'comment', '评论内容': 'comment', 'comment': 'comment',
+        '评分': 'sentiment_score', '打分': 'sentiment_score', 'sentiment_score': 'sentiment_score',
+        '昵称': 'user_name', '用户名': 'user_name', 'user_name': 'user_name',
+        '日期': 'comment_date', '评论时间': 'comment_date', '评论日期': 'comment_date', 'comment_date': 'comment_date',
+    }
+    frame = frame.rename(columns={name: aliases[name] for name in frame.columns if name in aliases})
+    required = {'spot_name', 'comment', 'sentiment_score'}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        return jsonify({'status': 'error', 'message': 'CSV 缺少必要列：' + '、'.join(missing)}), 400
+    from review.identity import normalize_date
+    records, errors = [], []
+    for index, row in frame.iterrows():
+        spot = str(row.get('spot_name', '')).strip()
+        comment = str(row.get('comment', '')).strip()
+        try:
+            raw_score = str(row.get('sentiment_score', '')).strip()
+            numeric = float(raw_score)
+            score = int(numeric)
+            if numeric != score or score not in {1, 2, 3, 4, 5}:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append({'row': int(index) + 2, 'reason': '评分必须为 1–5 的整数'})
+            continue
+        if not spot or not comment:
+            errors.append({'row': int(index) + 2, 'reason': '景点名称和评论内容不能为空'})
+            continue
+        records.append({
+            'spot_name': spot,
+            'comment': comment,
+            'sentiment_score': score,
+            'user_name': str(row.get('user_name', '')).strip(),
+            'comment_date': normalize_date(row.get('comment_date', '')),
+            'source': 'CSV导入',
+        })
+    if errors:
+        return jsonify({'status': 'error', 'message': f'发现 {len(errors)} 行无效数据，未创建批次。',
+                        'data': {'errors': errors[:20], 'total_errors': len(errors)}}), 400
+    if not records:
+        return jsonify({'status': 'error', 'message': 'CSV 中没有可导入的评论记录'}), 400
+    try:
+        from review.service import create_csv_batch
+        batch_id = create_csv_batch(records, os.path.basename(uploaded.filename)[:255])
+        return jsonify({'status': 'success', 'message': f'已接收 {len(records)} 条评论，正在匹配并评估。',
+                        'data': {'batch_id': batch_id, 'total_rows': len(records)}}), 202
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/crawl', methods=['POST'])
+def api_review_crawl():
+    data = request.get_json(silent=True) or {}
+    spot_name = str(data.get('spot_name', '')).strip()
+    url = str(data.get('url', '')).strip()
+    try:
+        pages = int(data.get('pages', 1))
+    except (TypeError, ValueError):
+        return jsonify({'status': 'error', 'message': '爬取页数必须为整数'}), 400
+    parsed = urlparse(url)
+    if not spot_name or parsed.scheme != 'https' or parsed.hostname not in {'you.ctrip.com'} or '/sight/' not in parsed.path:
+        return jsonify({'status': 'error', 'message': '请填写景点名称和有效的携程景点评论页链接'}), 400
+    if pages < 1 or pages > 50:
+        return jsonify({'status': 'error', 'message': '爬取页数范围为 1–50 页'}), 400
+    try:
+        from review.service import create_crawler_batch
+        batch_id = create_crawler_batch(spot_name, url, pages)
+        return jsonify({'status': 'success', 'message': '爬取任务已启动。',
+                        'data': {'batch_id': batch_id}}), 202
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/items/<int:item_id>/decision', methods=['POST'])
+def api_review_decision(item_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        from review.service import submit_decision
+        submit_decision(item_id, data.get('action'), data.get('score'),
+                        data.get('candidate_id'), data.get('resolution'), data.get('note'))
+        return jsonify({'status': 'success', 'message': '审核决定已保存。'})
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/review/batches/<batch_id>/publish', methods=['POST'])
+def api_review_publish(batch_id):
+    try:
+        from review.service import submit_publish
+        submit_publish(batch_id)
+        return jsonify({'status': 'success', 'message': '安全写入任务已启动。'}), 202
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/overview')
 def api_overview():
@@ -129,7 +303,7 @@ def api_db_status():
 
 @app.route('/api/add_comment', methods=['POST'])
 def api_add_comment():
-    """手动添加评论"""
+    """手动添加评论也进入模型审核批次，避免绕过复核直接入库。"""
     try:
         data = request.get_json()
         if not data:
@@ -138,20 +312,20 @@ def api_add_comment():
         for f in required:
             if f not in data:
                 return jsonify({'status':'error','message':f'缺少{f}'}), 400
-        if processor._db:
-            ok = processor._db.add_comment(
-                spot_name      = data['spot_name'],
-                comment        = data['comment'],
-                sentiment_score= int(data['sentiment_score']),
-                user_name      = data.get('user_name',''),
-                comment_date   = data.get('comment_date',''),
-                source         = data.get('source','手动添加')
-            )
-            if ok:
-                # 触发一次即时检测
-                processor._check_and_update()
-                return jsonify({'status':'success','message':'添加成功'})
-        return jsonify({'status':'error','message':'数据库未连接'}), 500
+        try:
+            score = int(data['sentiment_score'])
+        except (TypeError, ValueError):
+            return jsonify({'status': 'error', 'message': '评分必须是 1–5 的整数'}), 400
+        if score not in {1, 2, 3, 4, 5}:
+            return jsonify({'status': 'error', 'message': '评分只能为 1–5'}), 400
+        from review.service import create_rows_batch
+        batch_id = create_rows_batch([{
+            'spot_name': data['spot_name'], 'comment': data['comment'],
+            'sentiment_score': score, 'user_name': data.get('user_name', ''),
+            'comment_date': data.get('comment_date', ''), 'source': data.get('source', '手动添加'),
+        }], 'manual')
+        return jsonify({'status': 'success', 'message': '已创建待审核批次。',
+                        'data': {'batch_id': batch_id}}), 202
     except Exception as e:
         return jsonify({'status':'error','message':str(e)}), 500
 

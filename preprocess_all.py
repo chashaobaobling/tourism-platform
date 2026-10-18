@@ -1,5 +1,5 @@
 """
-preprocess_all.py - 批量预处理数据并写入数据库（V2）
+preprocess_all.py - 批量预处理数据并创建评论审核批次（V2）
 支持：
   1. 单文件导入：python preprocess_all.py 文件路径
   2. 文件夹批量导入：python preprocess_all.py 文件夹路径
@@ -221,60 +221,26 @@ def main():
     final_df['sentiment_score'] = final_df['sentiment_score'].apply(clean_score)
     final_df['comment_date'] = final_df['comment_date'].apply(clean_date)
 
-    # 去重
-    before = len(final_df)
-    final_df = final_df.drop_duplicates(subset=['spot_name', 'comment'])
-    after = len(final_df)
-    print(f"  去重前 {before} 条，去重后 {after} 条")
+    # 保留候选重复记录，交给审核批次的身份核对，不按景点+正文粗暴丢行。
+    print(f"  保留 {len(final_df)} 条；重复身份候选将在审核工作台标记")
 
     print(f"\n合并后总计：{len(final_df)} 条")
     print(f"\n景点分布：")
     print(final_df['spot_name'].value_counts())
 
-    # 写入数据库
+    # 送入审核暂存区，禁止本脚本绕过人工复核直写正式表。
     print("\n" + "-" * 60)
-    print("写入数据库...")
+    print("创建评论审核批次...")
     print("-" * 60)
 
     try:
-        from database import TourismDatabase
-        db = TourismDatabase()
-        if not db.is_connected():
-            print("✗ 数据库未连接，跳过入库")
-        else:
-            total_inserted = 0
-            for spot in final_df['spot_name'].unique():
-                spot_df = final_df[final_df['spot_name'] == spot].copy()
-
-                # 查数据库已有评论，过滤重复
-                try:
-                    from sqlalchemy import text
-                    with db.engine.connect() as conn:
-                        existing = pd.read_sql(
-                            text("SELECT comment FROM comments WHERE spot_name=:name"),
-                            conn, params={'name': spot}
-                        )
-                    if not existing.empty:
-                        existing_set = set(existing['comment'].tolist())
-                        before = len(spot_df)
-                        spot_df = spot_df[~spot_df['comment'].isin(existing_set)]
-                        print(f"  「{spot}」: 数据库已有 {len(existing)} 条，本次过滤 {before - len(spot_df)} 条重复")
-                except Exception as e:
-                    print(f"  「{spot}」: 检查重复失败 - {e}")
-
-                if spot_df.empty:
-                    print(f"  「{spot}」: 无新数据可入库")
-                    continue
-
-                count = db.batch_add_comments(spot_df)
-                total_inserted += count
-                print(f"  ✓ 「{spot}」: 入库 {count} 条")
-
-            print(f"\n✅ 数据库总入库 {total_inserted} 条")
-    except ImportError:
-        print("✗ database.py 未找到，跳过入库")
+        from review.service import create_rows_batch
+        batch_id = create_rows_batch(final_df.to_dict('records'), 'csv',
+                                     filename=os.path.basename(target_path))
+        print(f"✓ 已创建审核批次：{batch_id}（{len(final_df)} 条）")
+        print("  打开网页「数据审核」完成复核后再发布到正式评论表")
     except Exception as e:
-        print(f"✗ 数据库操作失败：{e}")
+        print(f"✗ 创建审核批次失败：{e}")
         import traceback
         traceback.print_exc()
 

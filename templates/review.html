@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>评论数据审核工作台 · 探游中国</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .review-page{max-width:1500px;margin:0 auto;padding:22px 24px 40px;color:var(--t1)}
+    .review-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:17px}
+    .review-head h1{font-size:25px;margin:0 0 5px}.review-sub{color:var(--t2);font-size:13px}
+    .review-home{color:var(--blue);text-decoration:none;font-size:13px;white-space:nowrap}
+    .review-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:14px}
+    .review-step,.review-card{background:var(--card);border:1px solid var(--border2);border-radius:13px;box-shadow:var(--shadow)}
+    .review-step{min-height:58px;display:flex;align-items:center;gap:10px;padding:10px 13px}
+    .review-step-n{width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:var(--card2);color:var(--blue);font-size:12px}
+    .review-step strong,.review-step small{display:block}.review-step strong{font-size:13px;font-weight:600}.review-step small{font-size:11px;color:var(--t3)}
+    .review-card{padding:15px 17px;margin-top:12px}
+    .review-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .review-title{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+    .review-n{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:var(--blue);background:rgba(0,212,170,.12);font-size:11px}
+    .review-muted{color:var(--t3);font-size:11px}
+    .review-status{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border2);background:var(--card);border-radius:9px;color:var(--t2);font-size:12px}
+    .review-dot{width:7px;height:7px;border-radius:50%;background:var(--t3)}
+    .review-dot.ok{background:var(--green)}.review-dot.busy{background:var(--yellow)}.review-dot.bad{background:var(--red)}
+    .review-source-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+    .review-source{display:flex;align-items:center;gap:12px;min-height:70px;padding:11px 13px;border-radius:10px;background:var(--card2);border:1px solid var(--border2)}
+    .review-source-icon{width:35px;height:35px;display:grid;place-items:center;flex:0 0 35px;border-radius:10px;background:rgba(0,212,170,.12);color:var(--blue);font-size:17px}
+    .review-source-icon.csv{background:rgba(167,139,250,.14);color:var(--purple)}
+    .review-source-copy{flex:1;min-width:0}.review-source-copy strong,.review-source-copy small{display:block}
+    .review-source-copy strong{font-size:13px;font-weight:600}.review-source-copy small{margin-top:3px;color:var(--t3);font-size:11px}
+    .review-btn{border:1px solid var(--border2);border-radius:8px;background:var(--card);color:var(--t1);padding:7px 11px;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+    .review-btn:hover{border-color:var(--blue)}.review-btn.primary{border-color:transparent;background:var(--gradient1);color:#062a29;font-weight:600}
+    .review-btn:disabled{opacity:.48;cursor:not-allowed}
+    .review-crawl-form{display:flex;gap:8px;align-items:center;margin-top:10px}
+    .review-input,.review-select{min-height:34px;padding:6px 9px;color:var(--t1);background:var(--card);border:1px solid var(--border2);border-radius:8px;font:inherit;font-size:12px;min-width:0}
+    .review-input.spot{width:150px}.review-input.url{flex:1}.review-input.pages{width:76px}
+    .review-model-row{display:grid;grid-template-columns:1.1fr 1fr 1.4fr;gap:9px}
+    .review-model-box{min-height:53px;display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;background:var(--card2)}
+    .review-model-box strong,.review-model-box small{display:block}.review-model-box strong{font-size:12px;font-weight:600}.review-model-box small{color:var(--t3);font-size:11px;margin-top:2px}
+    .review-model-icon{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:rgba(167,139,250,.14);color:var(--purple);font-size:11px}
+    .review-classes{color:var(--t2);font-size:11px}.review-classes b{color:var(--t1);font-weight:600}
+    .review-output-tags{display:flex;flex-wrap:wrap;gap:5px}.review-output-tags span{padding:4px 7px;background:var(--card);border:1px solid var(--border2);border-radius:7px;color:var(--t2);font-size:10px}
+    .review-model-message{margin-top:9px;color:var(--t3);font-size:11px;line-height:1.6}.review-model-message.error{color:var(--orange)}
+    .review-batch-summary{display:flex;gap:14px;flex-wrap:wrap;color:var(--t2);font-size:11px}
+    .review-batch-summary b{color:var(--t1);font-variant-numeric:tabular-nums;font-weight:600}
+    .review-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .review-filters{display:flex;gap:5px;flex-wrap:wrap}
+    .review-filter{border:0;border-radius:8px;padding:7px 9px;background:transparent;color:var(--t2);font:inherit;font-size:11px;cursor:pointer}
+    .review-filter.on{background:rgba(0,212,170,.12);color:var(--blue);font-weight:600}
+    .review-table-wrap{overflow-x:auto}
+    .review-table{width:100%;min-width:1060px;border-collapse:collapse;table-layout:fixed}
+    .review-table th{padding:8px 8px;text-align:left;color:var(--t3);font-size:10px;font-weight:500;background:var(--card2);border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);white-space:nowrap}
+    .review-table td{padding:9px 8px;border-bottom:1px solid var(--border2);vertical-align:middle;font-size:11px;color:var(--t2)}
+    .review-table tr:last-child td{border-bottom:0}
+    .review-comment{color:var(--t1);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .review-meta{display:block;color:var(--t3);margin-top:3px;font-size:10px}
+    .review-badge{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:10px;white-space:nowrap}
+    .review-badge.warn{background:rgba(251,191,36,.13);color:var(--yellow)}.review-badge.pass{background:rgba(52,211,153,.12);color:var(--green)}
+    .review-action-cell{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+    .review-action-cell .review-btn{font-size:10px;padding:5px 7px}.review-action-cell .review-select{font-size:10px;min-height:29px;padding:4px 6px;width:72px}
+    .review-resolve{width:85px!important}.review-empty{padding:23px;text-align:center;color:var(--t3)}.review-empty strong{display:block;color:var(--t2);font-weight:500;margin-bottom:4px}
+    .review-pages{display:flex;align-items:center;justify-content:space-between;margin-top:10px;color:var(--t3);font-size:11px}
+    .review-page-actions{display:flex;align-items:center;gap:7px}.review-page-actions button{min-width:30px}
+    .review-footer{display:flex;align-items:center;justify-content:space-between;gap:14px}
+    .review-db-copy strong,.review-db-copy small{display:block}.review-db-copy strong{font-size:13px;font-weight:600}.review-db-copy small{color:var(--t3);font-size:11px;margin-top:3px}
+    #reviewToast{position:fixed;right:22px;bottom:22px;z-index:10;max-width:min(440px,calc(100vw - 32px));padding:11px 15px;border-radius:10px;background:var(--card);border:1px solid var(--border2);box-shadow:var(--shadow2);color:var(--t1);font-size:12px;display:none}
+    @media(max-width:900px){.review-page{padding:18px 14px 30px}.review-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.review-model-row{grid-template-columns:1fr}.review-head{align-items:flex-start;flex-direction:column}}
+    @media(max-width:620px){.review-source-grid{grid-template-columns:1fr}.review-crawl-form{flex-wrap:wrap}.review-input.url{flex-basis:100%;order:3}.review-crawl-form .review-btn{flex:1}.review-footer{align-items:flex-start;flex-direction:column}.review-toolbar{align-items:flex-start;flex-direction:column}.review-batch-summary{gap:8px}}
+  </style>
+</head>
+<body>
+<div class="topbar" id="topbar"><div class="topbar-inner">
+  <a class="logo" href="/"><span class="logo-icon">🏯</span><span class="logo-text">探游中国</span></a>
+  <div class="nav-items">
+    <a class="nav-btn" href="/">首页</a><a class="nav-btn" href="/">词云分析</a><a class="nav-btn" href="/">深度分析</a>
+    <a class="nav-btn" href="/">景点对比</a><a class="nav-btn" href="/">旅游规划</a><a class="nav-btn active" href="/review">数据审核</a>
+  </div>
+</div></div>
+<main class="review-page">
+  <header class="review-head">
+    <div><h1>评论数据审核工作台</h1><div class="review-sub">爬虫与 CSV 数据统一经过模型评估、人工复核，再写入正式评论表</div></div>
+    <div class="review-status" id="batchState"><i class="review-dot" id="batchDot"></i><span id="batchStateText">尚未导入数据</span></div>
+  </header>
+  <section class="review-flow" aria-label="审核流程">
+    <div class="review-step"><span class="review-step-n">1</span><div><strong>数据输入</strong><small>爬虫采集或上传 CSV</small></div></div>
+    <div class="review-step"><span class="review-step-n">2</span><div><strong>AI 评分评估</strong><small>Keras 三分类模型</small></div></div>
+    <div class="review-step"><span class="review-step-n">3</span><div><strong>人工复核</strong><small>差异、低置信度与重复项</small></div></div>
+    <div class="review-step"><span class="review-step-n">4</span><div><strong>数据库同步</strong><small>审核通过后新增或更新</small></div></div>
+  </section>
+  <section class="review-card" aria-label="数据输入">
+    <div class="review-card-head"><div class="review-title"><span class="review-n">1</span>数据输入</div><span class="review-muted" id="batchCount">导入成功后显示本批记录数</span></div>
+    <div class="review-source-grid">
+      <div class="review-source"><span class="review-source-icon">↻</span><div class="review-source-copy"><strong>携程景点评论爬虫</strong><small>沿用项目 Selenium 爬取流程，结果先进入审核批次</small></div><button class="review-btn primary" id="showCrawler">设置爬取</button></div>
+      <div class="review-source"><span class="review-source-icon csv">▤</span><div class="review-source-copy"><strong>导入历史 CSV</strong><small>支持 景点名称、昵称、评分、评论、日期 等列</small></div><input id="csvFile" type="file" accept=".csv,text/csv" hidden><button class="review-btn" id="chooseCsv">选择 CSV</button></div>
+    </div>
+    <form class="review-crawl-form" id="crawlerForm" hidden>
+      <input class="review-input spot" name="spot_name" placeholder="景点名称" required>
+      <input class="review-input url" name="url" type="url" placeholder="https://you.ctrip.com/sight/..." required>
+      <input class="review-input pages" name="pages" type="number" min="1" max="50" value="1" aria-label="爬取页数" required>
+      <button class="review-btn primary" type="submit">开始爬取</button>
+    </form>
+  </section>
+  <section class="review-card" aria-label="AI 评估">
+    <div class="review-card-head"><div class="review-title"><span class="review-n">2</span>AI 评分评估</div><span class="review-muted" id="modelRunState">等待导入数据</span></div>
+    <div class="review-model-row">
+      <div class="review-model-box"><span class="review-model-icon">AI</span><div><strong>Keras 情感分类模型</strong><small id="reviewModelPath">读取模型配置中…</small></div></div>
+      <div class="review-model-box"><div class="review-classes"><b>1–2 分</b> 差评　 <b>3 分</b> 中评　 <b>4–5 分</b> 好评</div></div>
+      <div class="review-model-box"><div class="review-output-tags"><span>模型预测类别</span><span>预测置信度</span><span>与原评分是否一致</span></div></div>
+    </div>
+    <div class="review-model-message" id="reviewModelMessage" aria-live="polite"></div>
+  </section>
+  <section class="review-card" aria-label="人工复核">
+    <div class="review-card-head"><div class="review-title"><span class="review-n">3</span>人工复核</div><div class="review-batch-summary" id="batchSummary"></div></div>
+    <div class="review-toolbar">
+      <div class="review-filters" id="reviewFilters">
+        <button class="review-filter on" data-filter="all">全部</button><button class="review-filter" data-filter="needs_review">待复核</button>
+        <button class="review-filter" data-filter="auto_pass">一致通过</button><button class="review-filter" data-filter="approved">人工通过</button>
+        <button class="review-filter" data-filter="identity_issue">身份待确认</button><button class="review-filter" data-filter="written">已写入</button>
+      </div>
+      <button class="review-btn primary" id="publishBatch" disabled>确认并写入数据库</button>
+    </div>
+    <div class="review-table-wrap"><table class="review-table">
+      <colgroup><col style="width:25%"><col style="width:8%"><col style="width:10%"><col style="width:8%"><col style="width:10%"><col style="width:12%"><col style="width:27%"></colgroup>
+      <thead><tr><th>评论 / 景点</th><th>原评分</th><th>模型预测</th><th>置信度</th><th>一致性</th><th>身份匹配</th><th>人工决定</th></tr></thead>
+      <tbody id="reviewRows"><tr><td colspan="7"><div class="review-empty"><strong>暂无审核批次</strong>导入 CSV 或启动爬虫后，评论才会显示在这里</div></td></tr></tbody>
+    </table></div>
+    <div class="review-pages"><span id="pageInfo">—</span><div class="review-page-actions"><button class="review-btn" id="prevPage" disabled>上一页</button><span id="pageNumber">0 / 0</span><button class="review-btn" id="nextPage" disabled>下一页</button></div></div>
+  </section>
+  <section class="review-card" aria-label="数据库同步">
+    <div class="review-card-head"><div class="review-title"><span class="review-n">4</span>数据库同步</div><span class="review-muted">发布前重新核对唯一标识</span></div>
+    <div class="review-footer"><div class="review-db-copy"><strong>安全新增或更新正式评论</strong><small>更新已有记录时只更新确认后的评分；评论、昵称、日期和原始记录 ID 保持不变。</small></div><span class="review-muted" id="publishState">等待审核通过记录</span></div>
+  </section>
+</main>
+<div id="reviewToast" role="status" aria-live="polite"></div>
+<script>
+(function(){
+  var batchId = null, page = 1, pageSize = 25, filter = 'all', timer = null, modelAvailable = false;
+  var labels = {queued:'排队中',crawling:'爬取中',matching:'匹配数据库',evaluating:'模型评估中',ready:'待发布',committing:'数据库写入中',completed:'已完成',partially_written:'部分写入',failed:'处理失败'};
+  var el = function(id){return document.getElementById(id);};
+  function escapeHtml(value){return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function toast(message){var t=el('reviewToast');t.textContent=message;t.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(function(){t.style.display='none';},4200);}
+  function request(url, options){return fetch(url,options||{}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||'请求失败');return j;});});}
+  function updateModel(){request('/api/review/model-status').then(function(r){var d=r.data||{};modelAvailable=!!d.available;el('reviewModelPath').textContent=d.path||'模型路径未配置';el('reviewModelMessage').textContent=d.available?'模型已就绪 · '+(d.labels||[]).join(' / '):(d.message||'模型暂不可用');el('reviewModelMessage').className='review-model-message'+(d.available?'':' error');loadBatch();}).catch(function(e){el('reviewModelMessage').textContent=e.message;el('reviewModelMessage').className='review-model-message error';});}
+  function statusClass(status){return ['crawling','matching','evaluating','committing','queued'].indexOf(status)>=0?'busy':status==='failed'?'bad':status==='ready'||status==='completed'||status==='partially_written'?'ok':'';}
+  function identityLabel(item){var names={new:'新记录',matched:'匹配 1 条',possible_match:'正文相同，身份不同',ambiguous:'多条候选',incomplete:'缺少昵称/日期',db_unavailable:'数据库未连接',duplicate_in_batch:'批次内重复',resolved:'已人工指定记录',manual_new:'已确认新建',skipped:'已跳过',pending:'待匹配'};return names[item.identity_status]||item.identity_status;}
+  function statusBadge(item){var agrees=Number(item.rating_agrees)===1;var label=item.rating_agrees==null?'待评估':agrees?'一致':'有差异';var extra=item.review_status==='auto_pass'?' · 自动通过':item.review_status==='approved'?' · 人工通过':item.review_status==='written'?' · 已写入':item.review_status==='rejected'?' · 已跳过':item.review_status==='needs_review'?' · 待复核':'';return '<span class="review-badge '+(agrees?'pass':'warn')+'">'+label+escapeHtml(extra)+'</span>';}
+  function controls(item){
+    if(item.review_status==='written'||item.review_status==='rejected')return '<span class="review-muted">'+(item.review_status==='written'?'已写入 ID '+escapeHtml(item.written_comment_id):'已跳过')+'</span>';
+    var resolver='';
+    if(item.candidate_ids.length&&['ambiguous','possible_match','incomplete','db_unavailable'].indexOf(item.identity_status)>=0){resolver='<select class="review-select review-resolve" data-candidate aria-label="选择数据库记录"><option value="">选目标 ID</option>'+item.candidate_ids.map(function(id){return '<option value="'+id+'">ID '+id+'</option>';}).join('')+'</select>';}
+    if(item.identity_status==='possible_match'){resolver+='<select class="review-select review-resolve" data-resolution aria-label="确认新增"><option value="">另存？</option><option value="new">确认新记录</option></select>';}
+    else if((['incomplete','db_unavailable'].indexOf(item.identity_status)>=0&&!item.candidate_ids.length)||item.identity_status==='duplicate_in_batch'){resolver+='<select class="review-select review-resolve" data-resolution aria-label="确认身份处理"><option value="">身份处理…</option><option value="new">确认按新记录</option><option value="skip">跳过</option></select>';}
+    var score='<select class="review-select" data-score aria-label="人工评分">'+[1,2,3,4,5].map(function(n){return '<option value="'+n+'" '+(n===Number(item.sentiment_score)?'selected':'')+'>'+n+'分</option>';}).join('')+'</select>';
+    return '<div class="review-action-cell">'+resolver+'<button class="review-btn" data-action="keep">保留原分</button><button class="review-btn" data-action="model">确认模型类</button>'+score+'<button class="review-btn" data-action="manual">改分通过</button><button class="review-btn" data-action="skip">跳过</button></div>';
+  }
+  function draw(data){
+    var batch=data.batch, counts=data.counts||{};
+    batchId=batch.batch_id;
+    el('batchDot').className='review-dot '+statusClass(batch.status);
+    el('batchStateText').textContent=(labels[batch.status]||batch.status)+(batch.total_rows?' · '+Number(batch.total_rows).toLocaleString()+' 条':'');
+    el('batchCount').textContent=batch.total_rows?('本批已导入 '+Number(batch.total_rows).toLocaleString()+' 条'):'导入成功后显示本批记录数';
+    if(batch.status==='evaluating')el('modelRunState').textContent='正在评估 '+batch.processed_rows+' / '+batch.total_rows;
+    else if(batch.status==='ready'||batch.status==='partially_written')el('modelRunState').textContent='本批模型评估完成';
+    else if(batch.status==='failed')el('modelRunState').textContent='本批处理失败';
+    else el('modelRunState').textContent=batch.total_rows?'等待评估完成':'等待导入数据';
+    if(batch.error){el('reviewModelMessage').textContent=batch.error;el('reviewModelMessage').className='review-model-message error';}
+    el('batchSummary').innerHTML='本批 <b>'+Number(batch.total_rows||0).toLocaleString()+'</b> 条　待复核 <b>'+counts.needs_review+'</b>　自动通过 <b>'+counts.auto_pass+'</b>　人工通过 <b>'+counts.approved+'</b>　身份待确认 <b>'+counts.identity_issues+'</b>';
+    var ready=['ready','partially_written'].indexOf(batch.status)>=0;
+    el('publishBatch').disabled=!ready||!modelAvailable||!(counts.auto_pass+counts.approved>0);
+    el('publishState').textContent=batch.status==='committing'?'正在安全写入…':counts.written?('已写入 '+counts.written+' 条'):counts.auto_pass+counts.approved?('可写入 '+(counts.auto_pass+counts.approved)+' 条'):'等待审核通过记录';
+    if(batch.status==='failed'&&batch.error)toast(batch.error);
+    var rows=data.items||[];
+    if(!rows.length){el('reviewRows').innerHTML='<tr><td colspan="7"><div class="review-empty"><strong>'+(batch.total_rows?'当前筛选下没有记录':'批次中没有评论')+'</strong>'+(batch.status==='failed'?'请查看模型或爬虫错误信息。':'导入成功并完成评估后，记录会显示在这里。')+'</div></td></tr>';}
+    else{el('reviewRows').innerHTML=rows.map(function(item){
+      var model=item.model_predicted_class?escapeHtml(item.model_predicted_class):'—';
+      var conf=item.model_confidence==null?'—':(Number(item.model_confidence)*100).toFixed(1)+'%';
+      return '<tr data-item="'+item.item_id+'"><td><div class="review-comment">'+escapeHtml(item.comment)+'</div><span class="review-meta">'+escapeHtml(item.spot_name)+' · '+escapeHtml(item.comment_date||'日期未知')+' · '+escapeHtml(item.user_name||'昵称未知')+'</span></td><td>'+escapeHtml(item.sentiment_score)+' 分</td><td>'+model+'</td><td>'+conf+'</td><td>'+statusBadge(item)+'</td><td>'+escapeHtml(identityLabel(item))+(item.candidate_ids.length?'<span class="review-meta">候选 ID：'+item.candidate_ids.join(', ')+'</span>':'')+'</td><td>'+controls(item)+'</td></tr>';
+    }).join('');}
+    var pages=Math.max(1,Math.ceil(data.total/pageSize));
+    el('pageInfo').textContent=data.total?('共 '+Number(data.total).toLocaleString()+' 条'):'—';
+    el('pageNumber').textContent=data.total?page+' / '+pages:'0 / 0';
+    el('prevPage').disabled=page<=1;el('nextPage').disabled=page>=pages||!data.total;
+    if(['queued','crawling','matching','evaluating','committing'].indexOf(batch.status)>=0){clearTimeout(timer);timer=setTimeout(loadBatch,1800);}
+  }
+  function loadBatch(){var url=batchId?('/api/review/batches/'+encodeURIComponent(batchId)):'/api/review/batches/latest';url+='?page='+page+'&filter='+encodeURIComponent(filter);request(url).then(function(r){if(r.data)draw(r.data);}).catch(function(e){el('batchStateText').textContent=e.message;});}
+  function submitDecision(row, action){
+    var resolver=row.querySelector('[data-candidate]'), resolutionSelect=row.querySelector('[data-resolution]');
+    var resolutionValue=resolutionSelect?resolutionSelect.value:'';
+    if(resolutionSelect&&resolutionValue==='skip')action='skip';
+    if(resolver&&!resolver.value&&action!=='skip'&&!(resolutionSelect&&resolutionValue==='new')){toast('请先选择要匹配的数据库记录 ID 或明确另存新记录。');return;}
+    if(resolutionSelect&&action!=='skip'&&!resolutionValue){toast('请先明确选择“按新记录保留”或跳过。');return;}
+    var payload={action:action};
+    if(action==='manual')payload.score=row.querySelector('[data-score]').value;
+    if(resolver&&resolver.value)payload.candidate_id=resolver.value;
+    if(resolutionSelect&&resolutionValue==='new')payload.resolution='new';
+    request('/api/review/items/'+row.dataset.item+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){toast(r.message);loadBatch();}).catch(function(e){toast(e.message);});
+  }
+  el('reviewRows').addEventListener('click',function(event){var btn=event.target.closest('[data-action]');if(btn)submitDecision(btn.closest('tr'),btn.dataset.action);});
+  el('reviewFilters').addEventListener('click',function(event){var btn=event.target.closest('[data-filter]');if(!btn)return;filter=btn.dataset.filter;page=1;document.querySelectorAll('.review-filter').forEach(function(x){x.classList.toggle('on',x===btn);});loadBatch();});
+  el('prevPage').addEventListener('click',function(){if(page>1){page--;loadBatch();}});el('nextPage').addEventListener('click',function(){page++;loadBatch();});
+  el('showCrawler').addEventListener('click',function(){el('crawlerForm').hidden=!el('crawlerForm').hidden;});
+  el('chooseCsv').addEventListener('click',function(){el('csvFile').click();});
+  el('csvFile').addEventListener('change',function(){var f=this.files[0];if(!f)return;var form=new FormData();form.append('file',f);el('batchStateText').textContent='正在导入并检查 CSV…';request('/api/review/csv',{method:'POST',body:form}).then(function(r){batchId=r.data.batch_id;page=1;filter='all';toast(r.message);loadBatch();}).catch(function(e){toast(e.message);loadBatch();}).finally(function(){el('csvFile').value='';});});
+  el('crawlerForm').addEventListener('submit',function(event){event.preventDefault();var data=Object.fromEntries(new FormData(event.target).entries());el('batchStateText').textContent='正在启动爬取…';request('/api/review/crawl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(function(r){batchId=r.data.batch_id;page=1;filter='all';toast(r.message);loadBatch();}).catch(function(e){toast(e.message);loadBatch();});});
+  el('publishBatch').addEventListener('click',function(){if(!batchId)return;el('publishBatch').disabled=true;request('/api/review/batches/'+encodeURIComponent(batchId)+'/publish',{method:'POST'}).then(function(r){toast(r.message);loadBatch();}).catch(function(e){toast(e.message);loadBatch();});});
+  updateModel();loadBatch();
+})();
+</script>
+</body>
+</html>

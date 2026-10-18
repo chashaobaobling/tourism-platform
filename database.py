@@ -1,7 +1,6 @@
 """
-database.py - 纯数据库导入与管理工具
-职责：连接MySQL、原样导入CSV、读取数据、检测新数据
-不做任何清洗，清洗全部交给 data_processor.py
+database.py - MySQL 连接与只读数据管理
+职责：读取正式评论表、检测新数据；评论导入和变更统一经过审核工作台
 """
 
 import pandas as pd
@@ -111,109 +110,23 @@ class TourismDatabase:
             return None
 
     def init_from_csv(self, csv_path=None, force=False):
-        """从CSV原样导入，不做清洗"""
-        if not self.is_connected():
-            print("[DB][ERROR] 未连接")
-            return 0
-
-        path = csv_path or CSV_PATH
-        if not os.path.exists(path):
-            print(f"[DB][ERROR] 文件不存在: {path}")
-            return 0
-
-        current = self.get_total_count()
-        if not force and current > 0:
-            print(f"[DB] 已有 {current} 条，跳过（用 force=True 强制重导）")
-            return current
-
-        df = None
-        for enc in ['utf-8-sig', 'utf-8', 'gbk', 'gb2312']:
-            try:
-                df = pd.read_csv(path, encoding=enc)
-                break
-            except:
-                continue
-
-        if df is None:
-            print("[DB][ERROR] CSV读取失败")
-            return 0
-
-        print(f"[DB] CSV: {len(df)} 行, 列: {list(df.columns)}")
-
-        df = df.rename(columns=CSV_COLUMN_MAP)
-        if '序号' in df.columns:
-            df = df.drop(columns=['序号'])
-
-        df['source'] = '历史导入'
-
-        for col in ['spot_name', 'comment', 'sentiment_score', 'user_name', 'comment_date', 'source']:
-            if col not in df.columns:
-                df[col] = ''
-
+        """保留旧接口但禁止跳过审核流程或清空正式表。"""
         if force:
-            with self.engine.connect() as conn:
-                conn.execute(text("TRUNCATE TABLE comments"))
-                conn.commit()
-            print("[DB] 已清空表")
-
-        db_cols = ['spot_name', 'comment', 'sentiment_score', 'user_name', 'comment_date', 'source']
-        df[db_cols].to_sql('comments', self.engine, if_exists='append', index=False, chunksize=500)
-
-        total = self.get_total_count()
-        print(f"[DB] ✅ 导入完成！共 {total} 条")
-        return total
+            raise RuntimeError('force=True 的清空重导已停用，避免误删正式评论。请使用 /review 导入并审核。')
+        raise RuntimeError('直接 CSV 入库已停用。请在 /review 上传 CSV，审核完成后再发布。')
 
     def add_comment(self, spot_name, comment, sentiment_score,
                     user_name='', comment_date='', source='手动添加'):
-        if not self.is_connected():
-            return False
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO comments (spot_name,comment,sentiment_score,user_name,comment_date,source)
-                    VALUES (:s,:c,:sc,:u,:d,:src)
-                """), {'s':spot_name,'c':comment,'sc':int(sentiment_score),
-                       'u':user_name,'d':comment_date,'src':source})
-                conn.commit()
-            return True
-        except Exception as e:
-            print(f"[DB][ERROR] 添加失败: {e}")
-            return False
+        raise RuntimeError('直接写入评论已停用。请先创建审核批次并完成人工复核。')
 
     def batch_add_comments(self, df):
-        if not self.is_connected() or df is None or df.empty:
-            return 0
-        try:
-            db_cols = ['spot_name','comment','sentiment_score','user_name','comment_date','source']
-            for col in db_cols:
-                if col not in df.columns:
-                    df[col] = ''
-            df[db_cols].to_sql('comments', self.engine, if_exists='append', index=False, chunksize=200)
-            print(f"[DB] ✅ 批量入库 {len(df)} 条")
-            return len(df)
-        except Exception as e:
-            print(f"[DB][ERROR] 批量失败: {e}")
-            return 0
+        raise RuntimeError('直接批量写入已停用。请先创建审核批次并完成人工复核。')
 
 
 if __name__ == "__main__":
-    print("=" * 50)
-    print("  数据库工具")
-    print("=" * 50)
-
     db = TourismDatabase()
-    if not db.is_connected():
-        print("❌ 连接失败")
+    if db.is_connected():
+        print(f"当前数据库评论数：{db.get_total_count()}")
+        print("CSV 导入和评论新增请从网页 /review 创建审核批次；本脚本不再清空或直接写入正式表。")
     else:
-        current = db.get_total_count()
-        print(f"\n当前: {current} 条")
-
-        if current > 0:
-            print("\n1. 清空重导")
-            print("2. 跳过")
-            c = input("选择(1/2): ").strip()
-            if c == '1':
-                db.init_from_csv(force=True)
-        else:
-            print("\n数据库为空，开始导入...")
-            db.init_from_csv()
+        print("数据库连接不可用。")
